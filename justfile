@@ -127,12 +127,12 @@ rebase n="3":
 [group('Git')]
 [linux]
 diff-cp:
-    git diff | xclip -selection clipboard
+    git diff HEAD | xclip -selection clipboard
 
 [group('Git')]
 [windows]
 diff-cp:
-    git diff | /c/Windows/System32/clip.exe
+    git diff HEAD | /c/Windows/System32/clip.exe
 
 [group('Git')]
 today:
