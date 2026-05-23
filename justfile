@@ -127,12 +127,16 @@ rebase n="3":
 [group('Git')]
 [linux]
 diff-cp:
+    git add -N .  # Intent-to-add for untracked files
     git diff HEAD | xclip -selection clipboard
+    git reset  	  # Remove the intent-to-add markers
 
 [group('Git')]
 [windows]
 diff-cp:
+    git add -N .  # Intent-to-add for untracked files
     git diff HEAD | /c/Windows/System32/clip.exe
+    git reset  	  # Remove the intent-to-add markers
 
 [group('Git')]
 today:
