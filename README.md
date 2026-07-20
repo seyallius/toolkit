@@ -10,13 +10,14 @@ A growing collection of scripts I use to make computers do what I want. PowerShe
 
 Convert media files without losing your mind.
 
-| Script | What it does | Usage |
-|--------|-------------|-------|
+| Script    | What it does                                              | Usage                                                                   |
+|-----------|-----------------------------------------------------------|-------------------------------------------------------------------------|
 | `mkv2mp3` | Extract audio from MKV files to MP3, preserving cover art | Drag `.mkv` files onto `mkv2mp3.cmd` or run in folder with `.mkv` files |
-| `mp32mp4` | Convert MP3 to MP4 with cover art as video | Drag `.mp3` files onto `mp32mp4.cmd` or run in folder with `.mp3` files |
-| `ts2mp4` | Remux `.ts` files to `.mp4` (no re-encode) | `ts2mp4.cmd` in folder with `.ts` files |
+| `mp32mp4` | Convert MP3 to MP4 with cover art as video                | Drag `.mp3` files onto `mp32mp4.cmd` or run in folder with `.mp3` files |
+| `ts2mp4`  | Remux `.ts` files to `.mp4` (no re-encode)                | `ts2mp4.cmd` in folder with `.ts` files                                 |
 
 **Common flags for mkv2mp3 and mp32mp4:**
+
 - `-OutputDir <path>` — where to put converted files (default: `./out`)
 - `-Force` — overwrite existing output files
 - `-ShowVerbose` — see what ffmpeg is actually doing
@@ -25,13 +26,13 @@ Convert media files without losing your mind.
 
 Development shortcuts for my projects. Run `just` to see all available commands.
 
-| Group | What's in there |
-|-------|----------------|
-| Development | `build`, `dev`, `check`, `treeclip`, dependency management |
-| Docker | `db-up`, `db-down` |
-| Code Quality | `lint`, `audit` |
-| Dependency | `vendor`, `vendor-clean` |
-| Git | `amend`, `rebase`, `diff-cp`, `today` |
+| Group        | What's in there                                            |
+|--------------|------------------------------------------------------------|
+| Development  | `build`, `dev`, `check`, `treeclip`, dependency management |
+| Docker       | `db-up`, `db-down`                                         |
+| Code Quality | `lint`, `audit`                                            |
+| Dependency   | `vendor`, `vendor-clean`                                   |
+| Git          | `amend`, `rebase`, `diff-cp`, `today`                      |
 
 ## 🚀 Quick Start
 
