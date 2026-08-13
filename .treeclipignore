@@ -27,5 +27,12 @@ vendor/
 .DS_Store
 Thumbs.db
 
-# Git
-.git
+# ==================== Imported Patterns ====================
+
+# From .gitignore
+treeclip_*.txt
+.idea
+toolkit_*.txt
+***.exe
+***.bat
+target
