@@ -1,17 +1,18 @@
 //! module mkv2mp3 - Convert MKV files to MP3 with optional cover art extracted from video.
+//! Converts MKV files to MP3 with optional cover art using the batch pipeline.
 
 use crate::{
     cli::BatchArgs,
+    commands::batch::{run_batch, BatchTask, FileOutcome},
     ffmpeg::{args, Ffmpeg, ProcessRunner},
-    util::{
-        files,
-        output::{self, OutputDecision},
-    },
+    util::files,
 };
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::Args;
-use std::{fs, path::PathBuf};
-use tempfile::Builder;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 // --------------------------------- Types, Constants & Variables ------------------------------- //
 
@@ -20,6 +21,9 @@ const MKV_EXT: &str = "mkv";
 
 /// Extension for MP3 audio files.
 const MP3_EXT: &str = "mp3";
+
+/// Human readable name for MKV files.
+const FILE_TYPE_NAME: &str = "MKV";
 
 /// Default audio bitrate for MP3 encoding (kbps).
 const DEFAULT_BITRATE: u32 = 320;
@@ -32,6 +36,12 @@ const TEMP_COVER_PREFIX: &str = "toolkit-cover-";
 
 /// Suffix for temporary cover image files.
 const TEMP_COVER_SUFFIX: &str = ".jpg";
+
+/// Warning prefix for non-fatal issues like missing cover art.
+const WARNING_PREFIX: &str = "WARNING";
+
+/// Warning message template for failed cover extraction.
+const COVER_EXTRACTION_WARNING: &str = "cover extraction failed for {}; continuing without cover";
 
 /// Arguments for the `mkv2mp3` subcommand.
 #[derive(Debug, Args)]
@@ -53,84 +63,79 @@ pub struct Mkv2mp3Args {
     pub files: Vec<PathBuf>,
 }
 
+/// Task definition for MKV to MP3 extraction.
+struct MkvToMp3Task {
+    /// Size in pixels for the extracted cover art square.
+    cover_size: u32,
+
+    /// Audio bitrate in kbps.
+    bitrate: u32,
+
+    /// Whether to force overwrite existing files.
+    force: bool,
+}
+
 // ----------------------------------------- Public API ----------------------------------------- //
 
-/// Runs the MKV to MP3 conversion for each input file.
+/// Runs the MKV to MP3 conversion using the generic batch pipeline.
 pub fn run<R: ProcessRunner>(args_cli: Mkv2mp3Args, ffmpeg: &Ffmpeg<R>) -> Result<()> {
-    output::ensure_directory(&args_cli.batch.output_dir)?;
-    let inputs = collect(args_cli.files)?;
-    let mut succeeded = 0;
-    let mut skipped = 0;
-    let mut failed = 0;
-    for input in inputs {
-        let out = output::output_path(&input, &args_cli.batch.output_dir, MP3_EXT)?;
-        if output::decision(&out, args_cli.batch.force) == OutputDecision::SkipExisting {
-            println!("SKIPPED: {} already exists", out.display());
-            skipped += 1;
-            continue;
-        }
-        let cover = temp_path()?;
-        let has_cover = ffmpeg
-            .run(args::extract_frame(&input, &cover, args_cli.cover_size))
-            .is_ok()
-            && cover.metadata().map(|m| m.len() > 0).unwrap_or(false);
-        if !has_cover {
-            eprintln!(
-                "WARNING: cover extraction failed for {}; continuing without cover",
-                input.display()
-            );
-        }
-        let result = ffmpeg.run(args::encode_mp3(
-            &input,
-            has_cover.then_some(cover.as_path()),
-            &out,
-            args_cli.bitrate,
-            args_cli.batch.force,
-        ));
-        let _ = fs::remove_file(&cover);
-        match result {
-            Ok(()) => {
-                println!("SUCCESS: {}", out.display());
-                succeeded += 1
-            }
-            Err(error) => {
-                eprintln!("FAILED: {}: {error}", input.display());
-                failed += 1
-            }
-        }
-    }
-    println!("SUMMARY: {succeeded} succeeded, {skipped} skipped, {failed} failed");
-    if failed > 0 {
-        bail!("one or more conversions failed")
-    } else {
-        Ok(())
-    }
+    let task = MkvToMp3Task {
+        cover_size: args_cli.cover_size,
+        bitrate: args_cli.bitrate,
+        force: args_cli.batch.force,
+    };
+    run_batch(
+        &task,
+        args_cli.files,
+        &args_cli.batch.output_dir,
+        args_cli.batch.force,
+        ffmpeg,
+    )
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //
 
-/// Collects input files: either the given list or all MKV files in the current directory.
-fn collect(given: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
-    if given.is_empty() {
-        let found = files::discover(&std::env::current_dir()?, MKV_EXT)?;
-        if found.is_empty() {
-            println!("No MKV files found to process.");
-        }
-        Ok(found)
-    } else {
-        Ok(given
-            .into_iter()
-            .filter(|p| p.is_file() && files::has_extension(p, MKV_EXT))
-            .collect())
+impl BatchTask for MkvToMp3Task {
+    fn input_extension(&self) -> &str {
+        MKV_EXT
     }
-}
 
-/// Creates a temporary file path for a cover image.
-fn temp_path() -> Result<PathBuf> {
-    let (_, path) = Builder::new()
-        .prefix(TEMP_COVER_PREFIX)
-        .suffix(TEMP_COVER_SUFFIX)
-        .tempfile()?
-        .keep()?;
-    Ok(path)
+    fn output_extension(&self) -> &str {
+        MP3_EXT
+    }
+
+    fn file_type_name(&self) -> &str {
+        FILE_TYPE_NAME
+    }
+
+    fn process_file<R: ProcessRunner>(
+        &self,
+        input: &Path,
+        output: &Path,
+        ffmpeg: &Ffmpeg<R>,
+    ) -> Result<FileOutcome> {
+        let cover = files::temp_path(TEMP_COVER_PREFIX, TEMP_COVER_SUFFIX)?;
+        let has_cover = ffmpeg
+            .run(args::extract_frame(input, &cover, self.cover_size))
+            .is_ok()
+            && cover.metadata().map(|m| m.len() > 0).unwrap_or(false);
+
+        if !has_cover {
+            eprintln!(
+                "{WARNING_PREFIX}: {COVER_EXTRACTION_WARNING} {}",
+                input.display()
+            );
+        }
+
+        ffmpeg.run(args::encode_mp3(
+            input,
+            has_cover.then_some(cover.as_path()),
+            output,
+            self.bitrate,
+            self.force,
+        ))?;
+
+        let _ = fs::remove_file(&cover);
+        Ok(FileOutcome::Success)
+    }
 }

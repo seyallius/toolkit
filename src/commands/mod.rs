@@ -1,5 +1,7 @@
 //! module commands - Subcommand implementations for the toolkit.
+//! It dispatches CLI subcommands to their respective handler implementations.
 
+pub mod batch;
 pub mod mkv2mp3;
 pub mod mp32mp4;
 pub mod ts2mp4;

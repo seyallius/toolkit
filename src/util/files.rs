@@ -1,15 +1,23 @@
 //! module files - File discovery and companion image lookup.
+//! Handles file discovery, companion image lookup, and temporary file creation.
 
 use anyhow::{bail, Context, Result};
 use std::{
     fs,
     path::{Path, PathBuf},
 };
+use tempfile::Builder;
 
 // --------------------------------- Types, Constants & Variables ------------------------------- //
 
 /// Supported image extensions for companion image lookup.
 pub const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "bmp", "gif", "webp"];
+
+/// Prefix prepended to each extension in error messages.
+const EXTENSION_DISPLAY_PREFIX: &str = ".";
+
+/// Fallback parent directory when a path has no parent component.
+const FALLBACK_PARENT_DIR: &str = ".";
 
 // ----------------------------------------- Public API ----------------------------------------- //
 
@@ -22,7 +30,7 @@ pub const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "bmp", "gif", "web
 /// # Returns
 /// A sorted vector of matching file paths.
 pub fn discover(directory: &Path, extension: &str) -> Result<Vec<PathBuf>> {
-    let wanted = extension.trim_start_matches('.');
+    let wanted = extension.trim_start_matches(EXTENSION_DISPLAY_PREFIX);
     let mut paths = Vec::new();
     for entry in
         fs::read_dir(directory).with_context(|| format!("reading {}", directory.display()))?
@@ -52,7 +60,9 @@ pub fn discover(directory: &Path, extension: &str) -> Result<Vec<PathBuf>> {
 /// Returns an error if no image is found.
 pub fn companion_image(video: &Path) -> Result<PathBuf> {
     let stem = video.file_stem().context("video has no file stem")?;
-    let parent = video.parent().unwrap_or_else(|| Path::new("."));
+    let parent = video
+        .parent()
+        .unwrap_or_else(|| Path::new(FALLBACK_PARENT_DIR));
     for ext in IMAGE_EXTENSIONS {
         let candidate = parent.join(stem).with_extension(ext);
         if candidate.is_file() {
@@ -64,7 +74,7 @@ pub fn companion_image(video: &Path) -> Result<PathBuf> {
         video.display(),
         IMAGE_EXTENSIONS
             .iter()
-            .map(|e| format!(".{e}"))
+            .map(|e| format!("{EXTENSION_DISPLAY_PREFIX}{e}"))
             .collect::<Vec<_>>()
             .join(", ")
     )
@@ -72,8 +82,19 @@ pub fn companion_image(video: &Path) -> Result<PathBuf> {
 
 /// Checks if a path has the given extension (case-insensitive).
 pub fn has_extension(path: &Path, extension: &str) -> bool {
-    path.extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case(extension.trim_start_matches('.')))
+    path.extension().is_some_and(|e| {
+        e.eq_ignore_ascii_case(extension.trim_start_matches(EXTENSION_DISPLAY_PREFIX))
+    })
+}
+
+/// Creates a temporary file path with the given prefix and suffix.
+pub fn temp_path(prefix: &str, suffix: &str) -> Result<PathBuf> {
+    let (_, path) = Builder::new()
+        .prefix(prefix)
+        .suffix(suffix)
+        .tempfile()?
+        .keep()?;
+    Ok(path)
 }
 
 #[cfg(test)]

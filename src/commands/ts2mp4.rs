@@ -1,16 +1,14 @@
 //! module ts2mp4 - Convert TS files to MP4 via stream copy.
+//! Converts TS files to MP4 via stream copy using the batch pipeline.
 
 use crate::{
     cli::BatchArgs,
+    commands::batch::{run_batch, BatchTask, FileOutcome},
     ffmpeg::{args, Ffmpeg, ProcessRunner},
-    util::{
-        files,
-        output::{self, OutputDecision},
-    },
 };
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::Args;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // --------------------------------- Types, Constants & Variables ------------------------------- //
 
@@ -19,6 +17,9 @@ const TS_EXT: &str = "ts";
 
 /// Extension for MP4 files.
 const MP4_EXT: &str = "mp4";
+
+/// Human readable name for TS files.
+const FILE_TYPE_NAME: &str = "TS";
 
 /// Arguments for the `ts2mp4` subcommand.
 #[derive(Debug, Args)]
@@ -32,62 +33,50 @@ pub struct Ts2mp4Args {
     pub files: Vec<PathBuf>,
 }
 
+/// Task definition for TS to MP4 remuxing.
+struct Ts2Mp4Task {
+    /// Whether to force overwrite existing files.
+    force: bool,
+}
+
 // ----------------------------------------- Public API ----------------------------------------- //
 
-/// Runs the TS to MP4 conversion for each input file.
+/// Runs the TS to MP4 conversion using the generic batch pipeline.
 pub fn run<R: ProcessRunner>(args_cli: Ts2mp4Args, ffmpeg: &Ffmpeg<R>) -> Result<()> {
-    output::ensure_directory(&args_cli.batch.output_dir)?;
-    let inputs = inputs(args_cli.files)?;
-    let mut succeeded = 0;
-    let mut skipped = 0;
-    let mut failed = 0;
-    for input in inputs {
-        let out = output::output_path(&input, &args_cli.batch.output_dir, MP4_EXT)?;
-        if output::decision(&out, args_cli.batch.force) == OutputDecision::SkipExisting {
-            println!("SKIPPED: {} already exists", out.display());
-            skipped += 1;
-            continue;
-        }
-        match ffmpeg.run(args::remux_copy(&input, &out, args_cli.batch.force)) {
-            Ok(()) => {
-                println!("SUCCESS: {}", out.display());
-                succeeded += 1
-            }
-            Err(error) => {
-                eprintln!("FAILED: {}: {error}", input.display());
-                failed += 1
-            }
-        }
-    }
-    println!("SUMMARY: {succeeded} succeeded, {skipped} skipped, {failed} failed");
-    if failed > 0 {
-        bail!("one or more conversions failed")
-    } else {
-        Ok(())
-    }
+    let task = Ts2Mp4Task {
+        force: args_cli.batch.force,
+    };
+    run_batch(
+        &task,
+        args_cli.files,
+        &args_cli.batch.output_dir,
+        args_cli.batch.force,
+        ffmpeg,
+    )
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //
 
-/// Collects input files: either the given list or all TS files in the current directory.
-fn inputs(given: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
-    if given.is_empty() {
-        let files = files::discover(&std::env::current_dir()?, TS_EXT)?;
-        if files.is_empty() {
-            println!("No TS files found to process.");
-        }
-        Ok(files)
-    } else {
-        Ok(given
-            .into_iter()
-            .filter(|p| {
-                if !p.is_file() || !files::has_extension(p, TS_EXT) {
-                    eprintln!("WARNING: skipping invalid TS input: {}", p.display());
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect())
+impl BatchTask for Ts2Mp4Task {
+    fn input_extension(&self) -> &str {
+        TS_EXT
+    }
+
+    fn output_extension(&self) -> &str {
+        MP4_EXT
+    }
+
+    fn file_type_name(&self) -> &str {
+        FILE_TYPE_NAME
+    }
+
+    fn process_file<R: ProcessRunner>(
+        &self,
+        input: &Path,
+        output: &Path,
+        ffmpeg: &Ffmpeg<R>,
+    ) -> Result<FileOutcome> {
+        ffmpeg.run(args::remux_copy(input, output, self.force))?;
+        Ok(FileOutcome::Success)
     }
 }

@@ -1,17 +1,18 @@
 //! module mp32mp4 - Convert MP3 files to MP4 videos with optional cover art.
+//! Converts MP3 files to MP4 videos with optional cover art using the batch pipeline.
 
 use crate::{
     cli::BatchArgs,
+    commands::batch::{run_batch, BatchTask, FileOutcome},
     ffmpeg::{args, Ffmpeg, ProcessRunner},
-    util::{
-        files,
-        output::{self, OutputDecision},
-    },
+    util::files,
 };
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::Args;
-use std::{fs, path::PathBuf};
-use tempfile::Builder;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 // --------------------------------- Types, Constants & Variables ------------------------------- //
 
@@ -20,6 +21,9 @@ const MP3_EXT: &str = "mp3";
 
 /// Extension for MP4 video files.
 const MP4_EXT: &str = "mp4";
+
+/// Human readable name for MP3 files.
+const FILE_TYPE_NAME: &str = "MP3";
 
 /// Default audio bitrate for MP3 encoding (kbps).
 const DEFAULT_BITRATE: u32 = 320;
@@ -50,82 +54,80 @@ pub struct Mp32mp4Args {
     pub files: Vec<PathBuf>,
 }
 
+/// Task definition for MP3 to MP4 conversion.
+struct Mp3ToMp4Task {
+    /// Audio bitrate in kbps.
+    bitrate: u32,
+
+    /// Whether to force overwrite existing files.
+    force: bool,
+
+    /// Whether to skip files without embedded cover art.
+    no_cover_fallback: bool,
+}
+
 // ----------------------------------------- Public API ----------------------------------------- //
 
-/// Runs the MP3 to MP4 conversion for each input file.
+/// Runs the MP3 to MP4 conversion using the generic batch pipeline.
 pub fn run<R: ProcessRunner>(args_cli: Mp32mp4Args, ffmpeg: &Ffmpeg<R>) -> Result<()> {
-    output::ensure_directory(&args_cli.batch.output_dir)?;
-    let inputs = collect(args_cli.files)?;
-    let (mut succeeded, mut skipped, mut failed) = (0, 0, 0);
-    for input in inputs {
-        let out = output::output_path(&input, &args_cli.batch.output_dir, MP4_EXT)?;
-        if output::decision(&out, args_cli.batch.force) == OutputDecision::SkipExisting {
-            println!("SKIPPED: {} already exists", out.display());
-            skipped += 1;
-            continue;
-        }
-        let cover = temp_path()?;
-        let has_cover = ffmpeg
-            .run(args::extract_embedded_cover(&input, &cover))
-            .is_ok()
-            && cover.metadata().map(|m| m.len() > 0).unwrap_or(false);
-        if !has_cover && args_cli.no_cover_fallback {
-            println!("SKIPPED: no cover art in {}", input.display());
-            let _ = fs::remove_file(cover);
-            skipped += 1;
-            continue;
-        }
-        let result = ffmpeg.run(args::encode_mp4(
-            has_cover.then_some(cover.as_path()),
-            &input,
-            &out,
-            args_cli.bitrate,
-            args_cli.batch.force,
-        ));
-        let _ = fs::remove_file(cover);
-        match result {
-            Ok(()) => {
-                println!("SUCCESS: {}", out.display());
-                succeeded += 1
-            }
-            Err(error) => {
-                eprintln!("FAILED: {}: {error}", input.display());
-                failed += 1
-            }
-        }
-    }
-    println!("SUMMARY: {succeeded} succeeded, {skipped} skipped, {failed} failed");
-    if failed > 0 {
-        bail!("one or more conversions failed")
-    } else {
-        Ok(())
-    }
+    let task = Mp3ToMp4Task {
+        bitrate: args_cli.bitrate,
+        force: args_cli.batch.force,
+        no_cover_fallback: args_cli.no_cover_fallback,
+    };
+    run_batch(
+        &task,
+        args_cli.files,
+        &args_cli.batch.output_dir,
+        args_cli.batch.force,
+        ffmpeg,
+    )
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //
 
-/// Collects input files: either the given list or all MP3 files in the current directory.
-fn collect(given: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
-    if given.is_empty() {
-        let found = files::discover(&std::env::current_dir()?, MP3_EXT)?;
-        if found.is_empty() {
-            println!("No MP3 files found to process.");
-        }
-        Ok(found)
-    } else {
-        Ok(given
-            .into_iter()
-            .filter(|p| p.is_file() && files::has_extension(p, MP3_EXT))
-            .collect())
+impl BatchTask for Mp3ToMp4Task {
+    fn input_extension(&self) -> &str {
+        MP3_EXT
     }
-}
 
-/// Creates a temporary file path for a cover image.
-fn temp_path() -> Result<PathBuf> {
-    let (_, path) = Builder::new()
-        .prefix(TEMP_COVER_PREFIX)
-        .suffix(TEMP_COVER_SUFFIX)
-        .tempfile()?
-        .keep()?;
-    Ok(path)
+    fn output_extension(&self) -> &str {
+        MP4_EXT
+    }
+
+    fn file_type_name(&self) -> &str {
+        FILE_TYPE_NAME
+    }
+
+    fn process_file<R: ProcessRunner>(
+        &self,
+        input: &Path,
+        output: &Path,
+        ffmpeg: &Ffmpeg<R>,
+    ) -> Result<FileOutcome> {
+        let cover = files::temp_path(TEMP_COVER_PREFIX, TEMP_COVER_SUFFIX)?;
+        let has_cover = ffmpeg
+            .run(args::extract_embedded_cover(input, &cover))
+            .is_ok()
+            && cover.metadata().map(|m| m.len() > 0).unwrap_or(false);
+
+        if !has_cover && self.no_cover_fallback {
+            let _ = fs::remove_file(&cover);
+            return Ok(FileOutcome::Skipped(format!(
+                "no cover art in {}",
+                input.display()
+            )));
+        }
+
+        ffmpeg.run(args::encode_mp4(
+            has_cover.then_some(cover.as_path()),
+            input,
+            output,
+            self.bitrate,
+            self.force,
+        ))?;
+
+        let _ = fs::remove_file(&cover);
+        Ok(FileOutcome::Success)
+    }
 }
