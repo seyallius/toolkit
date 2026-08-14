@@ -1,7 +1,12 @@
-use std::{path::PathBuf, process::Command};
+//! module runner - FFmpeg process execution with a trait for testability.
+
 use anyhow::{bail, Result};
+use std::{path::PathBuf, process::Command};
 use thiserror::Error;
 
+// -------------------------------------------- Types ------------------------------------------- //
+
+/// Output from a process execution.
 #[derive(Debug, Clone)]
 pub struct ProcessOutput {
     pub success: bool,
@@ -10,6 +15,7 @@ pub struct ProcessOutput {
     pub stderr: String,
 }
 
+/// Error returned when an FFmpeg command fails.
 #[derive(Debug, Error)]
 #[error("ffmpeg failed (exit {code:?}): {stderr}\ncommand: {command}")]
 pub struct ProcessError {
@@ -24,6 +30,7 @@ pub trait ProcessRunner {
     fn run(&self, binary: &str, args: &[String]) -> Result<ProcessOutput>;
 }
 
+/// Real runner that executes processes via `std::process::Command`.
 pub struct RealRunner;
 impl ProcessRunner for RealRunner {
     fn run(&self, binary: &str, args: &[String]) -> Result<ProcessOutput> {
@@ -44,6 +51,12 @@ pub struct Ffmpeg<R> {
     runner: R,
 }
 impl<R: ProcessRunner> Ffmpeg<R> {
+    /// Creates a new `Ffmpeg` instance.
+    ///
+    /// # Arguments
+    /// * `binary` - Optional path to the ffmpeg executable; defaults to "ffmpeg".
+    /// * `verbose` - Whether to print the command before execution.
+    /// * `runner` - The process runner to use.
     pub fn new(binary: Option<PathBuf>, verbose: bool, runner: R) -> Self {
         Self {
             binary: binary.unwrap_or_else(|| PathBuf::from("ffmpeg")),
@@ -51,6 +64,11 @@ impl<R: ProcessRunner> Ffmpeg<R> {
             runner,
         }
     }
+
+    /// Runs the FFmpeg command with the given arguments.
+    ///
+    /// # Errors
+    /// Returns a `ProcessError` if the command fails.
     pub fn run(&self, args: Vec<String>) -> Result<()> {
         let binary = self.binary.to_string_lossy();
         if self.verbose {
@@ -76,6 +94,7 @@ impl<R: ProcessRunner> Ffmpeg<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     struct Fake;
     impl ProcessRunner for Fake {
         fn run(&self, _: &str, _: &[String]) -> Result<ProcessOutput> {
@@ -87,6 +106,7 @@ mod tests {
             })
         }
     }
+
     #[test]
     fn error_has_stderr() {
         let error = Ffmpeg::new(None, false, Fake)

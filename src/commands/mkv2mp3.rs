@@ -1,3 +1,5 @@
+//! module mkv2mp3 - Convert MKV files to MP3 with optional cover art extracted from video.
+
 use crate::{
     cli::BatchArgs,
     ffmpeg::{args, Ffmpeg, ProcessRunner},
@@ -11,15 +13,39 @@ use clap::Args;
 use std::{fs, path::PathBuf};
 use tempfile::Builder;
 
+// --------------------------------- Types, Constants & Variables ------------------------------- //
+
+/// Extension for Matroska video files.
+const MKV_EXT: &str = "mkv";
+
+/// Extension for MP3 audio files.
+const MP3_EXT: &str = "mp3";
+
+/// Default audio bitrate for MP3 encoding (kbps).
+const DEFAULT_BITRATE: u32 = 320;
+
+/// Default size (width and height) for extracted cover art.
+const DEFAULT_COVER_SIZE: u32 = 600;
+
+/// Prefix for temporary cover image files.
+const TEMP_COVER_PREFIX: &str = "toolkit-cover-";
+
+/// Suffix for temporary cover image files.
+const TEMP_COVER_SUFFIX: &str = ".jpg";
+
+/// Arguments for the `mkv2mp3` subcommand.
 #[derive(Debug, Args)]
 pub struct Mkv2mp3Args {
+    /// Common batch options like output directory and force overwrite.
     #[command(flatten)]
     pub batch: BatchArgs,
 
-    #[arg(long, default_value_t = 600)]
+    /// Size (width and height) for the extracted cover art.
+    #[arg(long, default_value_t = DEFAULT_COVER_SIZE)]
     pub cover_size: u32,
 
-    #[arg(long, default_value_t = 320)]
+    /// Audio bitrate in kbps for the output MP3.
+    #[arg(long, default_value_t = DEFAULT_BITRATE)]
     pub bitrate: u32,
 
     /// MKV files; scans the current directory when omitted.
@@ -27,6 +53,9 @@ pub struct Mkv2mp3Args {
     pub files: Vec<PathBuf>,
 }
 
+// ----------------------------------------- Public API ----------------------------------------- //
+
+/// Runs the MKV to MP3 conversion for each input file.
 pub fn run<R: ProcessRunner>(args_cli: Mkv2mp3Args, ffmpeg: &Ffmpeg<R>) -> Result<()> {
     output::ensure_directory(&args_cli.batch.output_dir)?;
     let inputs = collect(args_cli.files)?;
@@ -34,13 +63,13 @@ pub fn run<R: ProcessRunner>(args_cli: Mkv2mp3Args, ffmpeg: &Ffmpeg<R>) -> Resul
     let mut skipped = 0;
     let mut failed = 0;
     for input in inputs {
-        let out = output::output_path(&input, &args_cli.batch.output_dir, "mp3")?;
+        let out = output::output_path(&input, &args_cli.batch.output_dir, MP3_EXT)?;
         if output::decision(&out, args_cli.batch.force) == OutputDecision::SkipExisting {
             println!("SKIPPED: {} already exists", out.display());
             skipped += 1;
             continue;
         }
-        let cover = temp_path("toolkit-cover-", ".jpg")?;
+        let cover = temp_path()?;
         let has_cover = ffmpeg
             .run(args::extract_frame(&input, &cover, args_cli.cover_size))
             .is_ok()
@@ -78,9 +107,12 @@ pub fn run<R: ProcessRunner>(args_cli: Mkv2mp3Args, ffmpeg: &Ffmpeg<R>) -> Resul
     }
 }
 
+// -------------------------------------- Internal Helpers -------------------------------------- //
+
+/// Collects input files: either the given list or all MKV files in the current directory.
 fn collect(given: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     if given.is_empty() {
-        let found = files::discover(&std::env::current_dir()?, "mkv")?;
+        let found = files::discover(&std::env::current_dir()?, MKV_EXT)?;
         if found.is_empty() {
             println!("No MKV files found to process.");
         }
@@ -88,15 +120,16 @@ fn collect(given: Vec<PathBuf>) -> Result<Vec<PathBuf>> {
     } else {
         Ok(given
             .into_iter()
-            .filter(|p| p.is_file() && files::has_extension(p, "mkv"))
+            .filter(|p| p.is_file() && files::has_extension(p, MKV_EXT))
             .collect())
     }
 }
 
-fn temp_path(prefix: &str, suffix: &str) -> Result<PathBuf> {
+/// Creates a temporary file path for a cover image.
+fn temp_path() -> Result<PathBuf> {
     let (_, path) = Builder::new()
-        .prefix(prefix)
-        .suffix(suffix)
+        .prefix(TEMP_COVER_PREFIX)
+        .suffix(TEMP_COVER_SUFFIX)
         .tempfile()?
         .keep()?;
     Ok(path)

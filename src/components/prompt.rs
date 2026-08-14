@@ -1,4 +1,8 @@
+//! module prompt - Interactive user prompts with injectable streams.
+
 use std::io::{BufRead, Write};
+
+// ----------------------------------------- Public API ----------------------------------------- //
 
 /// Parse a yes/no response, falling back to `default` for unknown input.
 pub fn parse_yes_no(value: &str, default: bool) -> bool {
@@ -19,7 +23,19 @@ pub fn parse_choice(value: &str, choices: usize, default: usize) -> usize {
         .unwrap_or(default)
 }
 
-/// Prompt with injectable streams, keeping interactive code testable.
+/// Prompt for a choice from a list, using injectable input/output streams.
+///
+/// It is written with injectable streams, keeping interactive code testable.
+///
+/// # Arguments
+/// * `input` - Readable stream for user input.
+/// * `output` - Writable stream for the prompt.
+/// * `question` - The question to display.
+/// * `options` - List of option labels.
+/// * `default` - Default option index (1-based).
+///
+/// # Returns
+/// The chosen index (1-based) or the default on error.
 pub fn choice<R: BufRead, W: Write>(
     input: &mut R,
     output: &mut W,

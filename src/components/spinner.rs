@@ -1,3 +1,5 @@
+//! module spinner - A non-blocking spinner for stderr output.
+
 use std::{
     io::{self, IsTerminal, Write},
     sync::{
@@ -7,6 +9,11 @@ use std::{
     thread::{self, JoinHandle},
     time::Duration,
 };
+
+// --------------------------------- Types, Constants & Variables ------------------------------- //
+
+/// Delay between spinner frame updates in milliseconds.
+const SPINNER_DELAY_MS: u64 = 100;
 
 /// Supported spinner frame sequences.
 #[derive(Debug, Clone, Copy)]
@@ -20,6 +27,7 @@ pub enum SpinnerStyle {
     Circle,
 }
 impl SpinnerStyle {
+    /// Returns the frame string for the given index.
     pub fn frame(self, index: usize) -> &'static str {
         let frames: &[&str] = match self {
             Self::Dots => &["⠋", "⠙", "⠹", "⠸"],
@@ -41,6 +49,15 @@ pub struct Spinner {
     enabled: bool,
 }
 impl Spinner {
+    /// Starts a new spinner with the given style and message.
+    ///
+    /// # Arguments
+    /// * `style` - The spinner frame style.
+    /// * `message` - The message to display next to the spinner.
+    /// * `force` - If true, enable spinner even on non-terminals.
+    ///
+    /// # Returns
+    /// A `Spinner` instance that must be stopped to clean up the thread.
     pub fn start(style: SpinnerStyle, message: String, force: bool) -> Self {
         let enabled = force || io::stderr().is_terminal();
         let stop = Arc::new(AtomicBool::new(false));
@@ -52,7 +69,7 @@ impl Spinner {
                     eprint!("\r{} {message}", style.frame(index));
                     let _ = io::stderr().flush();
                     index += 1;
-                    thread::sleep(Duration::from_millis(100));
+                    thread::sleep(Duration::from_millis(SPINNER_DELAY_MS));
                 }
                 eprint!("\r{}\r", " ".repeat(message.len() + 4));
                 let _ = io::stderr().flush();
@@ -66,9 +83,13 @@ impl Spinner {
             enabled,
         }
     }
+
+    /// Returns whether the spinner is enabled (i.e., outputting frames).
     pub fn enabled(&self) -> bool {
         self.enabled
     }
+
+    /// Stops the spinner and waits for the thread to finish.
     pub fn stop(mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {

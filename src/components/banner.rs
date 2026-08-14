@@ -1,6 +1,18 @@
+//! module banner - Renders a boxed heading for command output.
+
 use console::Style;
 
-/// Renders a boxed heading suitable for any command.
+// ----------------------------------------- Public API ----------------------------------------- //
+
+/// Renders a boxed heading suitable for any command. with an optional subtitle.
+///
+/// # Arguments
+/// * `title` - Main title text.
+/// * `subtitle` - Optional subtitle text.
+/// * `color` - Whether to apply ANSI color styling.
+///
+/// # Returns
+/// A string containing the boxed banner.
 pub fn render(title: &str, subtitle: Option<&str>, color: bool) -> String {
     let content = match subtitle {
         Some(value) => format!("{title} — {value}"),

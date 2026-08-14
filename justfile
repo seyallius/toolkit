@@ -94,6 +94,11 @@ audit:
     go vet ./...
     go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+# Clippy
+[group('Code Quality')]
+clippy:
+    cargo clippy --all-targets --all-features -- -D warnings
+
 # ----------------------------------------------------------------
 # Dependency
 # ----------------------------------------------------------------

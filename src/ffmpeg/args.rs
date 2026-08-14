@@ -1,17 +1,66 @@
+//! module args - Builders for FFmpeg command-line arguments.
+
 use std::path::Path;
 
-fn path(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
-}
+// --------------------------------- Types, Constants & Variables ------------------------------- //
 
-fn overwrite(force: bool) -> Vec<String> {
-    vec![if force { "-y" } else { "-n" }.into()]
-}
+/// Codec name for stream copy (no re-encoding).
+const CODEC_COPY: &str = "copy";
 
+/// Codec name for MP3 encoding via LAME.
+const CODEC_MP3: &str = "libmp3lame";
+
+/// Codec name for H.264 encoding.
+const CODEC_H264: &str = "libx264";
+
+/// Codec name for AAC encoding.
+const CODEC_AAC: &str = "aac";
+
+/// Preset for ultrafast encoding.
+const PRESET_ULTRAFAST: &str = "ultrafast";
+
+/// Tune for still image video.
+const TUNE_STILLIMAGE: &str = "stillimage";
+
+/// Pixel format for YUV 4:2:0 planar.
+const PIX_FMT_YUV420P: &str = "yuv420p";
+
+/// Pixel format for YUVJ 4:2:0 planar (JPEG).
+const PIX_FMT_YUVJ420P: &str = "yuvj420p";
+
+/// Format name for lavfi (libavfilter input).
+const FORMAT_LAVFI: &str = "lavfi";
+
+/// Filtergraph for a black video with 1280x720 resolution, 1 frame per second.
+const COLOR_FILTER: &str = "color=c=black:s=1280x720:r=1";
+
+/// Filtergraph to scale to even dimensions only (no SAR or format conversion).
+const VF_SCALE_EVEN_ONLY: &str = "scale=trunc(iw/2)*2:trunc(ih/2)*2";
+
+/// Filtergraph to scale to even dimensions, set SAR to 1, and convert to yuv420p.
+const VF_SCALE_EVEN: &str = "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,format=yuv420p";
+
+/// Filtergraph for scaling an image to a square size while preserving aspect ratio, then to rgb24.
+const VF_SCALE_SQUARE_TEMPLATE: &str =
+    "scale={size}:{size}:force_original_aspect_ratio=decrease,format=rgb24";
+
+/// ID3v2 version to use.
+const ID3V2_VERSION: &str = "3";
+
+/// Write ID3v1 tag as well.
+const WRITE_ID3V1: &str = "1";
+
+/// Movflags for faststart.
+const MOVFLAGS_FASTSTART: &str = "+faststart";
+
+/// Constant rate factor for x264 encoding.
+const CRF_DEFAULT: &str = "23";
+
+// ----------------------------------------- Public API ----------------------------------------- //
 
 /// Stream-copy a transport stream into an MP4 container.
 pub fn remux_copy(input: &Path, output: &Path, force: bool) -> Vec<String> {
-    let mut a = vec!["-i".into(), path(input), "-c".into(), "copy".into()];
+    let mut a = vec!["-i".into(), path(input), "-c".into(), CODEC_COPY.into()];
     a.extend(overwrite(force));
     a.push(path(output));
     a
@@ -27,7 +76,7 @@ pub fn extract_frame(input: &Path, output: &Path, size: u32) -> Vec<String> {
         "-frames:v".into(),
         "1".into(),
         "-vf".into(),
-        format!("scale={size}:{size}:force_original_aspect_ratio=decrease,format=rgb24"),
+        VF_SCALE_SQUARE_TEMPLATE.replace("{size}", &size.to_string()),
         "-y".into(),
         path(output),
     ]
@@ -40,7 +89,7 @@ pub fn extract_embedded_cover(input: &Path, output: &Path) -> Vec<String> {
         path(input),
         "-an".into(),
         "-vcodec".into(),
-        "copy".into(),
+        CODEC_COPY.into(),
         "-y".into(),
         path(output),
     ]
@@ -62,20 +111,20 @@ pub fn encode_mp3(
         "-map".into(),
         "0:a:0".into(),
         "-c:a".into(),
-        "libmp3lame".into(),
+        CODEC_MP3.into(),
         "-b:a".into(),
         format!("{bitrate}k"),
         "-id3v2_version".into(),
-        "3".into(),
+        ID3V2_VERSION.into(),
         "-write_id3v1".into(),
-        "1".into(),
+        WRITE_ID3V1.into(),
     ]);
     if cover.is_some() {
         a.extend([
             "-map".into(),
             "1:v:0".into(),
             "-c:v".into(),
-            "copy".into(),
+            CODEC_COPY.into(),
             "-disposition:v:0".into(),
             "attached_pic".into(),
         ]);
@@ -98,37 +147,34 @@ pub fn encode_mp4(
     } else {
         vec![
             "-f".into(),
-            "lavfi".into(),
+            FORMAT_LAVFI.into(),
             "-i".into(),
-            "color=c=black:s=1280x720:r=1".into(),
+            COLOR_FILTER.into(),
         ]
     };
     a.extend([
         "-i".into(),
         path(audio),
         "-c:v".into(),
-        "libx264".into(),
+        CODEC_H264.into(),
         "-preset".into(),
-        "ultrafast".into(),
+        PRESET_ULTRAFAST.into(),
         "-tune".into(),
-        "stillimage".into(),
+        TUNE_STILLIMAGE.into(),
         "-pix_fmt".into(),
-        "yuv420p".into(),
+        PIX_FMT_YUV420P.into(),
     ]);
     if image.is_some() {
-        a.extend([
-            "-vf".into(),
-            "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1,format=yuv420p".into(),
-        ]);
+        a.extend(["-vf".into(), VF_SCALE_EVEN.into()]);
     }
     a.extend([
         "-c:a".into(),
-        "aac".into(),
+        CODEC_AAC.into(),
         "-b:a".into(),
         format!("{bitrate}k"),
         "-shortest".into(),
         "-movflags".into(),
-        "+faststart".into(),
+        MOVFLAGS_FASTSTART.into(),
     ]);
     a.extend(overwrite(force));
     a.push(path(output));
@@ -141,9 +187,9 @@ pub fn image_to_jpg(input: &Path, output: &Path) -> Vec<String> {
         "-i".into(),
         path(input),
         "-vf".into(),
-        "scale=trunc(iw/2)*2:trunc(ih/2)*2".into(),
+        VF_SCALE_EVEN_ONLY.into(),
         "-pix_fmt".into(),
-        "yuvj420p".into(),
+        PIX_FMT_YUVJ420P.into(),
         "-y".into(),
         path(output),
     ]
@@ -161,7 +207,7 @@ pub fn strip_thumbnail(input: &Path, output: &Path) -> Vec<String> {
         "-map_metadata".into(),
         "-1".into(),
         "-c".into(),
-        "copy".into(),
+        CODEC_COPY.into(),
         "-y".into(),
         path(output),
     ]
@@ -177,13 +223,13 @@ pub fn encode_loop(image: &Path, media: &Path, output: &Path) -> Vec<String> {
         "-i".into(),
         path(media),
         "-c:v".into(),
-        "libx264".into(),
+        CODEC_H264.into(),
         "-preset".into(),
-        "ultrafast".into(),
+        PRESET_ULTRAFAST.into(),
         "-crf".into(),
-        "23".into(),
+        CRF_DEFAULT.into(),
         "-c:a".into(),
-        "copy".into(),
+        CODEC_COPY.into(),
         "-shortest".into(),
         "-y".into(),
         path(output),
@@ -204,12 +250,24 @@ pub fn attach_thumbnail(video: &Path, image: &Path, output: &Path) -> Vec<String
         "-map".into(),
         "1:v:0".into(),
         "-c".into(),
-        "copy".into(),
+        CODEC_COPY.into(),
         "-disposition:v:1".into(),
         "attached_pic".into(),
         "-y".into(),
         path(output),
     ]
+}
+
+// -------------------------------------- Internal Helpers -------------------------------------- //
+
+/// Converts a path to a lossy string suitable for FFmpeg arguments.
+fn path(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+/// Returns `-y` or `-n` based on the `force` flag.
+fn overwrite(force: bool) -> Vec<String> {
+    vec![if force { "-y" } else { "-n" }.into()]
 }
 
 #[cfg(test)]
@@ -220,7 +278,7 @@ mod tests {
     fn remux_uses_copy() {
         assert_eq!(
             remux_copy(Path::new("a.ts"), Path::new("out/a.mp4"), false),
-            vec!["-i", "a.ts", "-c", "copy", "-n", "out/a.mp4"]
+            vec!["-i", "a.ts", "-c", CODEC_COPY, "-n", "out/a.mp4"]
         );
     }
     #[test]

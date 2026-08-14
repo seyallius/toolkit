@@ -1,12 +1,26 @@
+//! module files - File discovery and companion image lookup.
+
 use anyhow::{bail, Context, Result};
 use std::{
     fs,
     path::{Path, PathBuf},
 };
 
+// --------------------------------- Types, Constants & Variables ------------------------------- //
+
+/// Supported image extensions for companion image lookup.
 pub const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "bmp", "gif", "webp"];
 
+// ----------------------------------------- Public API ----------------------------------------- //
+
 /// Finds regular files in one directory with a case-insensitive extension.
+///
+/// # Arguments
+/// * `directory` - The directory to search.
+/// * `extension` - The file extension to match (without dot).
+///
+/// # Returns
+/// A sorted vector of matching file paths.
 pub fn discover(directory: &Path, extension: &str) -> Result<Vec<PathBuf>> {
     let wanted = extension.trim_start_matches('.');
     let mut paths = Vec::new();
@@ -27,6 +41,15 @@ pub fn discover(directory: &Path, extension: &str) -> Result<Vec<PathBuf>> {
 }
 
 /// Finds a same-basename companion image in the documented priority order.
+///
+/// # Arguments
+/// * `video` - Path to the video file.
+///
+/// # Returns
+/// The path to the first existing image with the same stem.
+///
+/// # Errors
+/// Returns an error if no image is found.
 pub fn companion_image(video: &Path) -> Result<PathBuf> {
     let stem = video.file_stem().context("video has no file stem")?;
     let parent = video.parent().unwrap_or_else(|| Path::new("."));
@@ -47,6 +70,7 @@ pub fn companion_image(video: &Path) -> Result<PathBuf> {
     )
 }
 
+/// Checks if a path has the given extension (case-insensitive).
 pub fn has_extension(path: &Path, extension: &str) -> bool {
     path.extension()
         .is_some_and(|e| e.eq_ignore_ascii_case(extension.trim_start_matches('.')))

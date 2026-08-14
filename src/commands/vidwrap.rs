@@ -1,3 +1,5 @@
+//! module vidwrap - Wrap a video with a companion image to create a new video with thumbnail.
+
 use crate::{
     components::{
         progress, prompt,
@@ -15,6 +17,30 @@ use std::{
 };
 use tempfile::Builder;
 
+// --------------------------------- Types, Constants & Variables ------------------------------- //
+
+/// Total number of steps in the vidwrap workflow.
+const TOTAL_STEPS: usize = 4;
+
+/// Default choice index for post-processing prompt (1‑based).
+const DEFAULT_POST_CHOICE: usize = 2;
+
+/// Prefix for temporary JPG files.
+const TEMP_IMAGE_PREFIX: &str = "toolkit-image-";
+
+/// Prefix for temporary cleaned video files.
+const TEMP_CLEAN_PREFIX: &str = "toolkit-clean-";
+
+/// Prefix for temporary video files.
+const TEMP_VIDEO_PREFIX: &str = "toolkit-video-";
+
+/// Suffix for temporary JPG files.
+const TEMP_IMAGE_SUFFIX: &str = ".jpg";
+
+/// Suffix for temporary video files.
+const TEMP_VIDEO_SUFFIX: &str = ".mp4";
+
+/// Arguments for the `vidwrap` subcommand.
 #[derive(Debug, Args)]
 pub struct VidwrapArgs {
     /// Video with a same-basename companion image.
@@ -22,6 +48,10 @@ pub struct VidwrapArgs {
     pub video: PathBuf,
 }
 
+// ----------------------------------------- Public API ----------------------------------------- //
+
+/// Runs the vidwrap workflow: converts companion image, strips existing thumbnail,
+/// encodes video with image, and attaches thumbnail.
 pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Result<()> {
     let video = args_cli
         .video
@@ -39,9 +69,9 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
         .context("video has no stem")?
         .to_string_lossy();
     let output = dir.join(format!("{stem}_with_image.mp4"));
-    let temp_jpg = temp_in(dir, "toolkit-image-", ".jpg")?;
-    let temp_clean = temp_in(dir, "toolkit-clean-", ".mp4")?;
-    let temp_video = temp_in(dir, "toolkit-video-", ".mp4")?;
+    let temp_jpg = temp_in(dir, TEMP_IMAGE_PREFIX, TEMP_IMAGE_SUFFIX)?;
+    let temp_clean = temp_in(dir, TEMP_CLEAN_PREFIX, TEMP_VIDEO_SUFFIX)?;
+    let temp_video = temp_in(dir, TEMP_VIDEO_PREFIX, TEMP_VIDEO_SUFFIX)?;
     let steps: [(String, SpinnerStyle, Vec<String>); 4] = [
         (
             "Converting image to JPG".into(),
@@ -55,17 +85,17 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
         ),
         (
             "Encoding video with image".into(),
-            SpinnerStyle::Circle,
+            SpinnerStyle::Arrow,
             args::encode_loop(&temp_jpg, &temp_clean, &temp_video),
         ),
         (
             "Adding thumbnail".into(),
-            SpinnerStyle::Arrow,
+            SpinnerStyle::Dots,
             args::attach_thumbnail(&temp_video, &temp_jpg, &output),
         ),
     ];
     for (index, (label, style, command)) in steps.into_iter().enumerate() {
-        println!("{}", progress::render(index + 1, 4, &label));
+        println!("{}", progress::render(index + 1, TOTAL_STEPS, &label));
         let spin = Spinner::start(style, label.clone(), false);
         let result = ffmpeg.run(command);
         spin.stop();
@@ -87,6 +117,9 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
     post_process(&video, &image, &output)
 }
 
+// -------------------------------------- Internal Helpers -------------------------------------- //
+
+/// Creates a temporary file path in the given directory.
 fn temp_in(dir: &Path, prefix: &str, suffix: &str) -> Result<PathBuf> {
     let (_, path) = Builder::new()
         .prefix(prefix)
@@ -96,6 +129,7 @@ fn temp_in(dir: &Path, prefix: &str, suffix: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// Prompts the user for post-processing actions on the original video and image.
 fn post_process(original: &Path, image: &Path, new_video: &Path) -> Result<()> {
     let stdin = io::stdin();
     let mut input = BufReader::new(stdin.lock());
@@ -109,7 +143,7 @@ fn post_process(original: &Path, image: &Path, new_video: &Path) -> Result<()> {
             "Keep both files",
             "Delete original only",
         ],
-        2,
+        DEFAULT_POST_CHOICE,
     )?;
     match choice {
         1 => {
