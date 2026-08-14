@@ -1,4 +1,6 @@
 //! module runner - FFmpeg process execution with a trait for testability.
+//! Provides structured output and error types for deterministic command testing
+//! and clean error propagation throughout the CLI pipeline.
 
 use anyhow::{bail, Result};
 use std::{path::PathBuf, process::Command};
@@ -6,31 +8,57 @@ use thiserror::Error;
 
 // -------------------------------------------- Types ------------------------------------------- //
 
-/// Output from a process execution.
+/// Captured output from a completed child process.
+/// Used by both real and fake runners to provide consistent execution results.
 #[derive(Debug, Clone)]
 pub struct ProcessOutput {
+    /// Whether the process exited with a success status code (typically 0).
     pub success: bool,
+
+    /// The raw OS exit code, if available.
+    /// May be `None` if the process was terminated by a signal on Unix systems.
     pub code: Option<i32>,
+
+    /// Complete standard output captured from the child process.
+    /// Empty string if no stdout was produced or capture failed.
     pub stdout: String,
+
+    /// Complete standard error captured from the child process.
+    /// Contains FFmpeg diagnostic logs and error messages.
     pub stderr: String,
 }
 
-/// Error returned when an FFmpeg command fails.
+/// Structured error returned when an FFmpeg command fails.
+/// Implements [std::fmt::Display] via thiserror for user-friendly error messages.
 #[derive(Debug, Error)]
 #[error("ffmpeg failed (exit {code:?}): {stderr}\ncommand: {command}")]
 pub struct ProcessError {
+    /// The full command string that was attempted, including binary path and all arguments.
+    /// Useful for reproducing failures manually in a terminal.
     pub command: String,
+
+    /// The exit code from the failed process.
+    /// Helps distinguish between different failure modes (e.g., 1 = general error, 255 = missing file).
     pub code: Option<i32>,
+
+    /// Standard output captured before or during the failure.
+    /// Sometimes contains partial progress or warnings even on failure.
     pub stdout: String,
+
+    /// Standard error containing the actual FFmpeg error diagnostics.
+    /// This is typically where the root cause explanation lives.
     pub stderr: String,
 }
 
 /// Minimal seam around process execution, allowing deterministic command tests.
+/// Implement this trait to inject fake behavior without touching the filesystem.
 pub trait ProcessRunner {
+    /// Executes a binary with the given arguments and returns structured output.
     fn run(&self, binary: &str, args: &[String]) -> Result<ProcessOutput>;
 }
 
-/// Real runner that executes processes via `std::process::Command`.
+/// Real implementation using [std::process::Command].
+/// Blocks the current thread until the child process completes.
 pub struct RealRunner;
 impl ProcessRunner for RealRunner {
     fn run(&self, binary: &str, args: &[String]) -> Result<ProcessOutput> {
@@ -45,18 +73,25 @@ impl ProcessRunner for RealRunner {
 }
 
 /// Configured FFmpeg facade used by commands.
+/// Encapsulates binary path resolution, verbose logging, and runner injection.
 pub struct Ffmpeg<R> {
+    /// Path to the ffmpeg executable. Defaults to "ffmpeg" if not explicitly provided.
     binary: PathBuf,
+
+    /// When true, prints the full command to stderr before execution
+    /// and includes stdout in error output for debugging.
     verbose: bool,
+
+    /// Injectable process runner for testing and alternative execution strategies.
     runner: R,
 }
 impl<R: ProcessRunner> Ffmpeg<R> {
-    /// Creates a new `Ffmpeg` instance.
+    /// Creates a new `Ffmpeg` instance with the specified configuration.
     ///
     /// # Arguments
     /// * `binary` - Optional path to the ffmpeg executable; defaults to "ffmpeg".
-    /// * `verbose` - Whether to print the command before execution.
-    /// * `runner` - The process runner to use.
+    /// * `verbose` - Whether to print commands and diagnostic output.
+    /// * `runner` - The process runner implementation to use.
     pub fn new(binary: Option<PathBuf>, verbose: bool, runner: R) -> Self {
         Self {
             binary: binary.unwrap_or_else(|| PathBuf::from("ffmpeg")),
@@ -68,7 +103,7 @@ impl<R: ProcessRunner> Ffmpeg<R> {
     /// Runs the FFmpeg command with the given arguments.
     ///
     /// # Errors
-    /// Returns a `ProcessError` if the command fails.
+    /// Returns a `ProcessError` wrapped in `anyhow::Error` if the command fails.
     pub fn run(&self, args: Vec<String>) -> Result<()> {
         let binary = self.binary.to_string_lossy();
         if self.verbose {

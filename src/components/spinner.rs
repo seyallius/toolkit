@@ -97,11 +97,20 @@ impl SpinnerStyle {
             // Simple dots variants
             Self::Dots2 => &["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"],
             Self::Dots3 => &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
-            Self::Dots4 => &["⠄", "⠆", "⠇", "⠋", "⠙", "⠸", "⠰", "⠠", "⠰", "⠸", "⠙", "⠋", "⠇", "⠆"],
+            Self::Dots4 => &[
+                "⠄", "⠆", "⠇", "⠋", "⠙", "⠸", "⠰", "⠠", "⠰", "⠸", "⠙", "⠋", "⠇", "⠆",
+            ],
             Self::Dots5 => &["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"],
-            Self::Dots6 => &["⠁", "⠉", "⠙", "⠚", "⠒", "⠂", "⠒", "⠲", "⠴", "⠤", "⠄", "⠄", "⠤", "⠴", "⠲", "⠒"],
-            Self::Dots7 => &["⠈", "⠉", "⠋", "⠓", "⠒", "⠐", "⠐", "⠒", "⠖", "⠦", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖"],
-            Self::Dots8 => &["⠁", "⠁", "⠉", "⠙", "⠚", "⠒", "⠂", "⠂", "⠒", "⠲", "⠴", "⠤", "⠄", "⠄", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖", "⠒", "⠐", "⠐", "⠒", "⠓", "⠋", "⠉", "⠈"],
+            Self::Dots6 => &[
+                "⠁", "⠉", "⠙", "⠚", "⠒", "⠂", "⠒", "⠲", "⠴", "⠤", "⠄", "⠄", "⠤", "⠴", "⠲", "⠒",
+            ],
+            Self::Dots7 => &[
+                "⠈", "⠉", "⠋", "⠓", "⠒", "⠐", "⠐", "⠒", "⠖", "⠦", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖",
+            ],
+            Self::Dots8 => &[
+                "⠁", "⠁", "⠉", "⠙", "⠚", "⠒", "⠂", "⠂", "⠒", "⠲", "⠴", "⠤", "⠄", "⠄", "⠤", "⠠",
+                "⠠", "⠤", "⠦", "⠖", "⠒", "⠐", "⠐", "⠒", "⠓", "⠋", "⠉", "⠈",
+            ],
             Self::Dots9 => &["⢹", "⢺", "⢼", "⣸", "⣇", "⡧", "⡗", "⡏"],
             Self::Dots10 => &["⢄", "⢂", "⢁", "⡁", "⡈", "⡐", "⡠"],
             Self::Dots11 => &["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
@@ -129,7 +138,9 @@ impl SpinnerStyle {
             Self::Balloon => &[" ", ".", "o", "O", "@", "*", " "],
             Self::Balloon2 => &[".", "o", "O", "°", "O", "o", "."],
             Self::Noise => &["▓", "▒", "░"],
-            Self::Bounce2 => &["⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏"],
+            Self::Bounce2 => &[
+                "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏",
+            ],
             Self::BoxBounce => &["▖", "▘", "▝", "▗"],
             Self::BoxBounce2 => &["▌", "▀", "▐", "▄"],
             Self::Triangle => &["◢", "◣", "◤", "◥"],
@@ -158,9 +169,13 @@ impl SpinnerStyle {
             Self::OrangePulse => &["🟧", "🟨", "🟧"],
             Self::BluePulse => &["🟦", "🟩", "🟦"],
             Self::OrangeBluePulse => &["🟧", "🟦", "🟧"],
-            Self::TimeTravel => &["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"],
+            Self::TimeTravel => &[
+                "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛",
+            ],
             Self::Earth => &["🌏", "🌍", "🌎"],
-            Self::Clock => &["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"],
+            Self::Clock => &[
+                "🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛",
+            ],
         };
         frames[index % frames.len()]
     }
@@ -168,7 +183,7 @@ impl SpinnerStyle {
 
 /// A lightweight non-blocking stderr spinner. It is disabled on non-terminals.
 pub struct Spinner {
-    stop: Arc<AtomicBool>,
+    stop_signal: Arc<AtomicBool>,
     handle: Option<JoinHandle<()>>,
     enabled: bool,
 }
@@ -184,9 +199,9 @@ impl Spinner {
     /// A `Spinner` instance that must be stopped to clean up the thread.
     pub fn start(style: SpinnerStyle, message: String, force: bool) -> Self {
         let enabled = force || io::stderr().is_terminal();
-        let stop = Arc::new(AtomicBool::new(false));
+        let stop_signal = Arc::new(AtomicBool::new(false));
         let handle = if enabled {
-            let signal = Arc::clone(&stop);
+            let signal = Arc::clone(&stop_signal);
             Some(thread::spawn(move || {
                 let mut index = 0;
                 while !signal.load(Ordering::Relaxed) {
@@ -202,7 +217,7 @@ impl Spinner {
             None
         };
         Self {
-            stop,
+            stop_signal,
             handle,
             enabled,
         }
@@ -215,7 +230,7 @@ impl Spinner {
 
     /// Stops the spinner and waits for the thread to finish.
     pub fn stop(mut self) {
-        self.stop.store(true, Ordering::Relaxed);
+        self.stop_signal.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
@@ -223,7 +238,7 @@ impl Spinner {
 }
 impl Drop for Spinner {
     fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
+        self.stop_signal.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
