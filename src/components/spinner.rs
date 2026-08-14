@@ -13,7 +13,7 @@ use std::{
 // --------------------------------- Types, Constants & Variables ------------------------------- //
 
 /// Delay between spinner frame updates in milliseconds.
-const SPINNER_DELAY_MS: u64 = 100;
+const SPINNER_DELAY_MS: u64 = 200;
 
 /// Supported spinner frame sequences.
 #[derive(Debug, Clone, Copy)]
@@ -25,6 +25,62 @@ pub enum SpinnerStyle {
     Bar,
     Spin,
     Circle,
+    Dots2,
+    Dots3,
+    Dots4,
+    Dots5,
+    Dots6,
+    Dots7,
+    Dots8,
+    Dots9,
+    Dots10,
+    Dots11,
+    Dots12,
+    Dots13,
+    Line,
+    Line2,
+    Pipe,
+    SimpleDots,
+    SimpleDots2,
+    Star,
+    Star2,
+    Flip,
+    Hamburger,
+    GrowVertical,
+    GrowHorizontal,
+    Balloon,
+    Balloon2,
+    Noise,
+    Bounce2,
+    BoxBounce,
+    BoxBounce2,
+    Triangle,
+    Arc,
+    CircleQuarters,
+    CircleHalves,
+    SquareCorners,
+    SquareQuarters,
+    SquareSpin,
+    Globe,
+    Moon,
+    Pinwheel,
+    Weather,
+    Christmas,
+    Grenade,
+    Point,
+    Layer,
+    BetaWave,
+    FingerDance,
+    FistBump,
+    SoccerHeader,
+    Mindblown,
+    Speaker,
+    OrangePulse,
+    BluePulse,
+    OrangeBluePulse,
+    TimeTravel,
+    Earth,
+    Clock,
 }
 impl SpinnerStyle {
     /// Returns the frame string for the given index.
@@ -37,6 +93,74 @@ impl SpinnerStyle {
             Self::Bar => &["▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"],
             Self::Spin => &["-", "\\", "|", "/"],
             Self::Circle => &["◴", "◷", "◶", "◵"],
+
+            // Simple dots variants
+            Self::Dots2 => &["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"],
+            Self::Dots3 => &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"],
+            Self::Dots4 => &["⠄", "⠆", "⠇", "⠋", "⠙", "⠸", "⠰", "⠠", "⠰", "⠸", "⠙", "⠋", "⠇", "⠆"],
+            Self::Dots5 => &["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"],
+            Self::Dots6 => &["⠁", "⠉", "⠙", "⠚", "⠒", "⠂", "⠒", "⠲", "⠴", "⠤", "⠄", "⠄", "⠤", "⠴", "⠲", "⠒"],
+            Self::Dots7 => &["⠈", "⠉", "⠋", "⠓", "⠒", "⠐", "⠐", "⠒", "⠖", "⠦", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖"],
+            Self::Dots8 => &["⠁", "⠁", "⠉", "⠙", "⠚", "⠒", "⠂", "⠂", "⠒", "⠲", "⠴", "⠤", "⠄", "⠄", "⠤", "⠠", "⠠", "⠤", "⠦", "⠖", "⠒", "⠐", "⠐", "⠒", "⠓", "⠋", "⠉", "⠈"],
+            Self::Dots9 => &["⢹", "⢺", "⢼", "⣸", "⣇", "⡧", "⡗", "⡏"],
+            Self::Dots10 => &["⢄", "⢂", "⢁", "⡁", "⡈", "⡐", "⡠"],
+            Self::Dots11 => &["⠁", "⠂", "⠄", "⡀", "⢀", "⠠", "⠐", "⠈"],
+            Self::Dots12 => &["⢀", "⢠", "⢰", "⢸", "⣸", "⣄", "⣆", "⣇", "⡇", "⡏", "⡗", "⡧"],
+            Self::Dots13 => &["⢈", "⢉", "⢋", "⢓", "⢗", "⢧", "⢧", "⢦", "⢖", "⢒", "⢑", "⢑"],
+
+            // Lines and pipes
+            Self::Line => &["-", "=", "≡", "="],
+            Self::Line2 => &["╴", "╸", "╶", "╺"],
+            Self::Pipe => &["┤", "┘", "┴", "└", "├", "┌", "┬", "┐"],
+
+            // Simple dots
+            Self::SimpleDots => &[".  ", ".. ", "...", "   "],
+            Self::SimpleDots2 => &[".  ", ".. ", "...", " ..", "  .", "   "],
+
+            // Stars
+            Self::Star => &["✶", "✸", "✹", "✺", "✹", "✷"],
+            Self::Star2 => &["+", "x", "*"],
+
+            // Other shapes
+            Self::Flip => &["_", "_", "_", "-", "`", "`", "'", "´", "-", "_", "_", "_"],
+            Self::Hamburger => &["☱", "☲", "☴"],
+            Self::GrowVertical => &["▁", "▃", "▄", "▅", "▆", "▇", "▆", "▅", "▄", "▃"],
+            Self::GrowHorizontal => &["▏", "▎", "▍", "▌", "▋", "▊", "▉", "▊", "▋", "▌", "▍", "▎"],
+            Self::Balloon => &[" ", ".", "o", "O", "@", "*", " "],
+            Self::Balloon2 => &[".", "o", "O", "°", "O", "o", "."],
+            Self::Noise => &["▓", "▒", "░"],
+            Self::Bounce2 => &["⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏"],
+            Self::BoxBounce => &["▖", "▘", "▝", "▗"],
+            Self::BoxBounce2 => &["▌", "▀", "▐", "▄"],
+            Self::Triangle => &["◢", "◣", "◤", "◥"],
+            Self::Arc => &["◜", "◝", "◞", "◟"],
+            Self::CircleQuarters => &["◴", "◷", "◶", "◵"],
+            Self::CircleHalves => &["◐", "◓", "◑", "◒"],
+            Self::SquareCorners => &["◰", "◳", "◲", "◱"],
+            Self::SquareQuarters => &["◖", "◗", "◖", "◗"],
+            Self::SquareSpin => &["▤", "▥", "▦", "▧", "▨", "▩", "▨", "▧", "▦", "▥"],
+            Self::Globe => &["🌍", "🌎", "🌏"],
+            Self::Moon => &["🌑", "🌒", "🌓", "🌔", "🌕", "🌖", "🌗", "🌘"],
+            Self::Pinwheel => &["🌀", "🌪"],
+
+            // Fun/novelty
+            Self::Weather => &["☀️", "☁️", "🌤️", "⛅", "🌥️"],
+            Self::Christmas => &["🎄", "🎅", "⭐", "❄️", "🎁"],
+            Self::Grenade => &["•", "•", "•", "•", "•", "💥"],
+            Self::Point => &["👉", "👉", "👉", "👉", "👈"],
+            Self::Layer => &["-", "=", "≡"],
+            Self::BetaWave => &["ρ", "β", "β", "β"],
+            Self::FingerDance => &["👉", "👆", "🖕", "👇", "👈", "👉"],
+            Self::FistBump => &["👊", "🤛", "🤜", "👊"],
+            Self::SoccerHeader => &["⚽", "⏹️", "⚽", "⏹️"],
+            Self::Mindblown => &["😐", "😮", "😲", "🤯"],
+            Self::Speaker => &["🔇", "🔈", "🔉", "🔊", "🔉", "🔈"],
+            Self::OrangePulse => &["🟧", "🟨", "🟧"],
+            Self::BluePulse => &["🟦", "🟩", "🟦"],
+            Self::OrangeBluePulse => &["🟧", "🟦", "🟧"],
+            Self::TimeTravel => &["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"],
+            Self::Earth => &["🌏", "🌍", "🌎"],
+            Self::Clock => &["🕐", "🕑", "🕒", "🕓", "🕔", "🕕", "🕖", "🕗", "🕘", "🕙", "🕚", "🕛"],
         };
         frames[index % frames.len()]
     }

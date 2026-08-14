@@ -85,7 +85,7 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
         ),
         (
             "Encoding video with image".into(),
-            SpinnerStyle::Arrow,
+            SpinnerStyle::Earth,
             args::encode_loop(&temp_jpg, &temp_clean, &temp_video),
         ),
         (
