@@ -23,7 +23,7 @@ build-windows-cross:
 
 # Build toolkit for windows target with cross in verbose mode (run `cargo install cross` for installation).
 [group('Development')]
-build-windows-cross:
+build-windows-cross-v:
     cross build --target x86_64-pc-windows-gnu --release -- --verbose
 
 # Run treeclip with default flags.

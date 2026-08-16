@@ -214,23 +214,29 @@ pub fn strip_thumbnail(input: &Path, output: &Path) -> Vec<String> {
 }
 
 /// Encode a looped image with the supplied media's audio.
+///
+/// Creates a video where a still image is displayed for the entire
+/// duration of the audio track. Uses ultrafast preset and CRF 23
+/// for quick encoding suitable for thumbnails/previews.
+///
+/// # Arguments
+/// * `image` - Path to the source image (should be even-dimension JPEG).
+/// * `media` - Path to the audio/video source providing the audio stream.
+/// * `output` - Destination path for the encoded MP4.
+///
+/// # Returns
+/// Vector of FFmpeg CLI arguments ready for process execution.
+#[rustfmt::skip]
 pub fn encode_loop(image: &Path, media: &Path, output: &Path) -> Vec<String> {
     vec![
-        "-loop".into(),
-        "1".into(),
-        "-i".into(),
-        path(image),
-        "-i".into(),
-        path(media),
-        "-c:v".into(),
-        CODEC_H264.into(),
-        "-preset".into(),
-        PRESET_ULTRAFAST.into(),
-        "-crf".into(),
-        CRF_DEFAULT.into(),
-        "-c:a".into(),
-        CODEC_COPY.into(),
-        "-shortest".into(),
+        "-loop".into(), "1".into(),   // ✅ Loop image indefinitely
+        "-i".into(), path(image),     // Image input (looped)
+        "-i".into(), path(media),     // Audio input
+        "-c:v".into(), CODEC_H264.into(),
+        "-preset".into(), PRESET_ULTRAFAST.into(),
+        "-crf".into(), CRF_DEFAULT.into(),
+        "-c:a".into(), CODEC_COPY.into(),
+        "-shortest".into(),           // Stop when shortest input ends
         "-y".into(),
         path(output),
     ]
