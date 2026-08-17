@@ -1,0 +1,68 @@
+name: Build & Release Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-binaries:
+    name: Build binaries for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact_name: treeclip-linux-x86_64
+
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact_name: treeclip-windows-x86_64.exe
+
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact_name: treeclip-macos-x86_64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package binary
+        shell: bash
+        run: |
+          BIN="target/${{ matrix.target }}/release/treeclip"
+          [[ "${{ matrix.target }}" == *windows* ]] && BIN="$BIN.exe"
+
+          if [[ "${{ matrix.target }}" == *windows* ]]; then
+            7z a "${{ matrix.artifact_name }}.zip" "$BIN"
+          else
+            tar czf "${{ matrix.artifact_name }}.tar.gz" -C "$(dirname "$BIN")" "$(basename "$BIN")"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}.*
+
+  create-release:
+    needs: build-binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            **/*.tar.gz
+            **/*.zip
+          generate_release_notes: true
