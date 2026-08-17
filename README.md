@@ -19,13 +19,13 @@ cross-platform media conversion workflows with progress feedback and batch proce
 ### From crates.io (Recommended)
 
 ```bash
-cargo install toolkit
+cargo install toolkitrs
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/your-username/toolkit.git
+git clone https://github.com/seyallius/toolkit.git
 cd toolkit
 cargo install --path .
 ```
@@ -38,7 +38,7 @@ cargo install --path .
 ## 🚀 Usage
 
 ```bash
-toolkit [OPTIONS] <COMMAND>
+toolkitrs [OPTIONS] <COMMAND>
 ```
 
 ### Global Options
@@ -60,13 +60,13 @@ Convert Transport Stream files to MP4 via stream copy (no re-encoding).
 
 ```bash
 # Convert all .ts files in current directory
-toolkit ts2mp4
+toolkitrs ts2mp4
 
 # Convert specific files to custom output directory
-toolkit ts2mp4 --output-dir ./converted video1.ts video2.ts
+toolkitrs ts2mp4 --output-dir ./converted video1.ts video2.ts
 
 # Overwrite existing outputs
-toolkit ts2mp4 --force
+toolkitrs ts2mp4 --force
 ```
 
 #### `mkv2mp3` — Extract Audio from MKV
@@ -75,13 +75,13 @@ Convert MKV files to MP3 with optional cover art extracted from video frames.
 
 ```bash
 # Default: 320kbps, 600px cover art
-toolkit mkv2mp3
+toolkitrs mkv2mp3
 
 # Custom bitrate and cover size
-toolkit mkv2mp3 --bitrate 256 --cover-size 800 movie.mkv
+toolkitrs mkv2mp3 --bitrate 256 --cover-size 800 movie.mkv
 
 # Force overwrite existing MP3s
-toolkit mkv2mp3 --force
+toolkitrs mkv2mp3 --force
 ```
 
 #### `mp32mp4` — Create Video from MP3
@@ -90,13 +90,13 @@ Convert MP3 files to MP4 videos using embedded cover art as the video track.
 
 ```bash
 # Use embedded cover art (black video fallback if missing)
-toolkit mp32mp4
+toolkitrs mp32mp4
 
 # Skip files without embedded cover art
-toolkit mp32mp4 --no-cover-fallback
+toolkitrs mp32mp4 --no-cover-fallback
 
 # Custom audio bitrate
-toolkit mp32mp4 --bitrate 256 song.mp3
+toolkitrs mp32mp4 --bitrate 256 song.mp3
 ```
 
 #### `vidwrap` — Wrap Video with Thumbnail
@@ -106,7 +106,7 @@ post-processing.
 
 ```bash
 # Requires a same-basename image (e.g., video.mp4 + video.jpg)
-toolkit vidwrap video.mp4
+toolkitrs vidwrap video.mp4
 ```
 
 Supported companion image formats (in priority order): `.png`, `.jpg`, `.jpeg`, `.bmp`, `.gif`, `.webp`
@@ -135,3 +135,7 @@ cargo clippy --all-targets -- -D warnings
 # Format check
 cargo fmt --check
 ```
+
+# License
+
+[MIT](./LICENSE)

@@ -1,8 +1,16 @@
 [package]
-name = "toolkit"
+name = "toolkitrs"
 version = "0.1.0"
 edition = "2021"
-description = "Small, dependable FFmpeg workflows"
+description = "A unified FFmpeg workflow CLI for batch media conversion, remuxing, and thumbnail embedding"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/seyallius/toolkit"
+homepage = "https://github.com/seyallius/toolkit"
+documentation = "https://docs.rs/toolkit"
+readme = "README.md"
+keywords = ["ffmpeg", "media", "cli", "batch", "video"]
+categories = ["command-line-utilities", "multimedia::video", "multimedia::audio"]
+exclude = ["bck/*", ".github/*"]
 
 [dependencies]
 anyhow = "1.0"
@@ -14,3 +22,9 @@ thiserror = "2.0"
 [dev-dependencies]
 assert_cmd = "2.0"
 predicates = "3.1"
+
+[profile.release]
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1

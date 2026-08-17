@@ -448,7 +448,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "toolkit"
+name = "toolkitrs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
