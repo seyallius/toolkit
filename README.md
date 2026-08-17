@@ -1,66 +1,137 @@
-# 🧰 toolkit
+# 🛠️ toolkit
 
-> scripts that do things. they just work. mostly.
+> A unified FFmpeg workflow CLI for common media tasks.
 
-A growing collection of scripts I use to make computers do what I want. PowerShell, Bash, whatever gets the job done.
+A fast, single-binary replacement for mixed PowerShell/Go media scripts. Built with Rust, it provides safe,
+cross-platform media conversion workflows with progress feedback and batch processing capabilities.
 
-## 📦 What's in here
+## ✨ Features
 
-### 🎬 FFmpeg Scripts (`powershell/ffmpeg/`)
+- **Unified CLI**: One binary for all media workflows (`ts2mp4`, `mkv2mp3`, `mp32mp4`, `vidwrap`)
+- **Batch Processing**: Automatic directory scanning with skip/overwrite logic
+- **Safe Defaults**: Prevents accidental data loss with explicit `--force` flags
+- **Rich UX**: Spinners, progress bars, and colored output (disable with `--no-color`)
+- **Testable Core**: Dependency-injected FFmpeg runner for deterministic testing
+- **Zero Runtime Dependencies**: Single static binary, no PowerShell or Go required
 
-Convert media files without losing your mind.
+## 📦 Installation
 
-| Script    | What it does                                              | Usage                                                                   |
-|-----------|-----------------------------------------------------------|-------------------------------------------------------------------------|
-| `mkv2mp3` | Extract audio from MKV files to MP3, preserving cover art | Drag `.mkv` files onto `mkv2mp3.cmd` or run in folder with `.mkv` files |
-| `mp32mp4` | Convert MP3 to MP4 with cover art as video                | Drag `.mp3` files onto `mp32mp4.cmd` or run in folder with `.mp3` files |
-| `ts2mp4`  | Remux `.ts` files to `.mp4` (no re-encode)                | `ts2mp4.cmd` in folder with `.ts` files                                 |
-
-**Common flags for mkv2mp3 and mp32mp4:**
-
-- `-OutputDir <path>` — where to put converted files (default: `./out`)
-- `-Force` — overwrite existing output files
-- `-ShowVerbose` — see what ffmpeg is actually doing
-
-### 🤖 Just Commands (`justfile`)
-
-Development shortcuts for my projects. Run `just` to see all available commands.
-
-| Group        | What's in there                                            |
-|--------------|------------------------------------------------------------|
-| Development  | `build`, `dev`, `check`, `treeclip`, dependency management |
-| Docker       | `db-up`, `db-down`                                         |
-| Code Quality | `lint`, `audit`                                            |
-| Dependency   | `vendor`, `vendor-clean`                                   |
-| Git          | `amend`, `rebase`, `diff-cp`, `today`                      |
-
-## 🚀 Quick Start
+### From crates.io (Recommended)
 
 ```bash
-# Clone it wherever you keep your tools
+cargo install toolkit
+```
+
+### From Source
+
+```bash
 git clone https://github.com/your-username/toolkit.git
-
-# For PowerShell scripts: just double-click the .cmd file
-# or run from terminal:
-.\powershell\ffmpeg\mkv2mp3.cmd my-video.mkv
-
-# For just commands: install just, then:
-just build
-just dev
+cd toolkit
+cargo install --path .
 ```
 
-## 📝 Adding New Scripts
+### Prerequisites
 
-When adding a new script, update the table above:
+- [FFmpeg](https://ffmpeg.org/download.html) must be installed and available in your PATH
+- Optional: Use `--ffmpeg-path <PATH>` to specify a custom FFmpeg location
 
-```markdown
-| `script-name` | One-line description of what it does | How to use it |
+## 🚀 Usage
+
+```bash
+toolkit [OPTIONS] <COMMAND>
 ```
 
-## ⚠️ Disclaimer
+### Global Options
 
-Some of these were written at 3 AM. They work on my machine. Your mileage may vary.
+| Flag                    | Description                                           |
+|-------------------------|-------------------------------------------------------|
+| `--verbose`             | Print FFmpeg commands and diagnostic output to stderr |
+| `--no-color`            | Disable ANSI color codes and styling                  |
+| `--ffmpeg-path <PATH>`  | Explicit path to ffmpeg executable                    |
+| `--ffprobe-path <PATH>` | Explicit path to ffprobe binary (reserved)            |
+| `-h, --help`            | Print help information                                |
+| `-V, --version`         | Print version information                             |
 
-## 📜 License
+### Commands
 
-Do whatever you want. If it breaks, you get to keep both pieces.
+#### `ts2mp4` — Remux TS to MP4
+
+Convert Transport Stream files to MP4 via stream copy (no re-encoding).
+
+```bash
+# Convert all .ts files in current directory
+toolkit ts2mp4
+
+# Convert specific files to custom output directory
+toolkit ts2mp4 --output-dir ./converted video1.ts video2.ts
+
+# Overwrite existing outputs
+toolkit ts2mp4 --force
+```
+
+#### `mkv2mp3` — Extract Audio from MKV
+
+Convert MKV files to MP3 with optional cover art extracted from video frames.
+
+```bash
+# Default: 320kbps, 600px cover art
+toolkit mkv2mp3
+
+# Custom bitrate and cover size
+toolkit mkv2mp3 --bitrate 256 --cover-size 800 movie.mkv
+
+# Force overwrite existing MP3s
+toolkit mkv2mp3 --force
+```
+
+#### `mp32mp4` — Create Video from MP3
+
+Convert MP3 files to MP4 videos using embedded cover art as the video track.
+
+```bash
+# Use embedded cover art (black video fallback if missing)
+toolkit mp32mp4
+
+# Skip files without embedded cover art
+toolkit mp32mp4 --no-cover-fallback
+
+# Custom audio bitrate
+toolkit mp32mp4 --bitrate 256 song.mp3
+```
+
+#### `vidwrap` — Wrap Video with Thumbnail
+
+Combine a video with a companion image to create a new video with an embedded thumbnail. Supports interactive
+post-processing.
+
+```bash
+# Requires a same-basename image (e.g., video.mp4 + video.jpg)
+toolkit vidwrap video.mp4
+```
+
+Supported companion image formats (in priority order): `.png`, `.jpg`, `.jpeg`, `.bmp`, `.gif`, `.webp`
+
+### Batch Arguments
+
+All batch commands (`ts2mp4`, `mkv2mp3`, `mp32mp4`) share these options:
+
+| Flag                 | Default | Description                                           |
+|----------------------|---------|-------------------------------------------------------|
+| `--output-dir <DIR>` | `./out` | Directory for converted files (created automatically) |
+| `--force`            | `false` | Overwrite existing output files instead of skipping   |
+
+## 🔧 Development
+
+```bash
+# Build debug binary
+cargo build
+
+# Run tests
+cargo test
+
+# Clippy linting
+cargo clippy --all-targets -- -D warnings
+
+# Format check
+cargo fmt --check
+```
