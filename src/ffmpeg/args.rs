@@ -2,6 +2,30 @@
 
 use std::path::Path;
 
+// --------------------------------- Macro --------------------------------- //
+
+/// Create a Vec<String> from string literals and values that implement Display.
+///
+/// # Examples
+/// ```
+/// let input = Path::new("video.mp4");
+/// let args = args!["-i", input, "-c", "copy"];
+/// assert_eq!(args, vec!["-i", "video.mp4", "-c", "copy"]);
+/// ```
+#[macro_export]
+macro_rules! args {
+    // Base case: empty
+    () => {
+        Vec::<String>::new()
+    };
+    // One or more arguments
+    ($($arg:expr),+ $(,)?) => {{
+        let mut v = Vec::new();
+        $(v.push($arg.to_string());)*
+        v
+    }};
+}
+
 // --------------------------------- Types, Constants & Variables ------------------------------- //
 
 /// Codec name for stream copy (no re-encoding).
@@ -60,7 +84,7 @@ const CRF_DEFAULT: &str = "23";
 
 /// Stream-copy a transport stream into an MP4 container.
 pub fn remux_copy(input: &Path, output: &Path, force: bool) -> Vec<String> {
-    let mut a = vec!["-i".into(), path(input), "-c".into(), CODEC_COPY.into()];
+    let mut a = args!["-i", path(input), "-c", CODEC_COPY];
     a.extend(overwrite(force));
     a.push(path(output));
     a
@@ -68,29 +92,29 @@ pub fn remux_copy(input: &Path, output: &Path, force: bool) -> Vec<String> {
 
 /// Extract a single scaled frame for album art.
 pub fn extract_frame(input: &Path, output: &Path, size: u32) -> Vec<String> {
-    vec![
-        "-ss".into(),
-        "00:00:01".into(),
-        "-i".into(),
+    args![
+        "-ss",
+        "00:00:01",
+        "-i",
         path(input),
-        "-frames:v".into(),
-        "1".into(),
-        "-vf".into(),
+        "-frames:v",
+        "1",
+        "-vf",
         VF_SCALE_SQUARE_TEMPLATE.replace("{size}", &size.to_string()),
-        "-y".into(),
+        "-y",
         path(output),
     ]
 }
 
 /// Extract an MP3 attached picture without decoding it.
 pub fn extract_embedded_cover(input: &Path, output: &Path) -> Vec<String> {
-    vec![
-        "-i".into(),
+    args![
+        "-i",
         path(input),
-        "-an".into(),
-        "-vcodec".into(),
-        CODEC_COPY.into(),
-        "-y".into(),
+        "-an",
+        "-vcodec",
+        CODEC_COPY,
+        "-y",
         path(output),
     ]
 }
@@ -103,30 +127,30 @@ pub fn encode_mp3(
     bitrate: u32,
     force: bool,
 ) -> Vec<String> {
-    let mut a = vec!["-threads".into(), "auto".into(), "-i".into(), path(input)];
+    let mut a = args!["-threads", "auto", "-i", path(input)];
     if let Some(cover) = cover {
         a.extend(["-i".into(), path(cover)]);
     }
-    a.extend([
-        "-map".into(),
-        "0:a:0".into(),
-        "-c:a".into(),
-        CODEC_MP3.into(),
-        "-b:a".into(),
+    a.extend(args![
+        "-map",
+        "0:a:0",
+        "-c:a",
+        CODEC_MP3,
+        "-b:a",
         format!("{bitrate}k"),
-        "-id3v2_version".into(),
-        ID3V2_VERSION.into(),
-        "-write_id3v1".into(),
-        WRITE_ID3V1.into(),
+        "-id3v2_version",
+        ID3V2_VERSION,
+        "-write_id3v1",
+        WRITE_ID3V1,
     ]);
     if cover.is_some() {
-        a.extend([
-            "-map".into(),
-            "1:v:0".into(),
-            "-c:v".into(),
-            CODEC_COPY.into(),
-            "-disposition:v:0".into(),
-            "attached_pic".into(),
+        a.extend(args![
+            "-map",
+            "1:v:0",
+            "-c:v",
+            CODEC_COPY,
+            "-disposition:v:0",
+            "attached_pic",
         ]);
     }
     a.extend(overwrite(force));
@@ -143,38 +167,33 @@ pub fn encode_mp4(
     force: bool,
 ) -> Vec<String> {
     let mut a = if let Some(image) = image {
-        vec!["-loop".into(), "1".into(), "-i".into(), path(image)]
+        args!["-loop", "1", "-i", path(image)]
     } else {
-        vec![
-            "-f".into(),
-            FORMAT_LAVFI.into(),
-            "-i".into(),
-            COLOR_FILTER.into(),
-        ]
+        args!["-f", FORMAT_LAVFI, "-i", COLOR_FILTER,]
     };
-    a.extend([
-        "-i".into(),
+    a.extend(args![
+        "-i",
         path(audio),
-        "-c:v".into(),
-        CODEC_H264.into(),
-        "-preset".into(),
-        PRESET_ULTRAFAST.into(),
-        "-tune".into(),
-        TUNE_STILLIMAGE.into(),
-        "-pix_fmt".into(),
-        PIX_FMT_YUV420P.into(),
+        "-c:v",
+        CODEC_H264,
+        "-preset",
+        PRESET_ULTRAFAST,
+        "-tune",
+        TUNE_STILLIMAGE,
+        "-pix_fmt",
+        PIX_FMT_YUV420P,
     ]);
     if image.is_some() {
-        a.extend(["-vf".into(), VF_SCALE_EVEN.into()]);
+        a.extend(args!["-vf", VF_SCALE_EVEN]);
     }
-    a.extend([
-        "-c:a".into(),
-        CODEC_AAC.into(),
-        "-b:a".into(),
+    a.extend(args![
+        "-c:a",
+        CODEC_AAC,
+        "-b:a",
         format!("{bitrate}k"),
-        "-shortest".into(),
-        "-movflags".into(),
-        MOVFLAGS_FASTSTART.into(),
+        "-shortest",
+        "-movflags",
+        MOVFLAGS_FASTSTART,
     ]);
     a.extend(overwrite(force));
     a.push(path(output));
@@ -183,32 +202,32 @@ pub fn encode_mp4(
 
 /// Convert an image to an even-dimension JPEG.
 pub fn image_to_jpg(input: &Path, output: &Path) -> Vec<String> {
-    vec![
-        "-i".into(),
+    args![
+        "-i",
         path(input),
-        "-vf".into(),
-        VF_SCALE_EVEN_ONLY.into(),
-        "-pix_fmt".into(),
-        PIX_FMT_YUVJ420P.into(),
-        "-y".into(),
+        "-vf",
+        VF_SCALE_EVEN_ONLY,
+        "-pix_fmt",
+        PIX_FMT_YUVJ420P,
+        "-y",
         path(output),
     ]
 }
 
 /// Copy A/V streams and omit attached pictures/metadata.
 pub fn strip_thumbnail(input: &Path, output: &Path) -> Vec<String> {
-    vec![
-        "-i".into(),
+    args![
+        "-i",
         path(input),
-        "-map".into(),
-        "0:v".into(),
-        "-map".into(),
-        "0:a?".into(),
-        "-map_metadata".into(),
-        "-1".into(),
-        "-c".into(),
-        CODEC_COPY.into(),
-        "-y".into(),
+        "-map",
+        "0:v",
+        "-map",
+        "0:a?",
+        "-map_metadata",
+        "-1",
+        "-c",
+        CODEC_COPY,
+        "-y",
         path(output),
     ]
 }
@@ -228,38 +247,38 @@ pub fn strip_thumbnail(input: &Path, output: &Path) -> Vec<String> {
 /// Vector of FFmpeg CLI arguments ready for process execution.
 #[rustfmt::skip]
 pub fn encode_loop(image: &Path, media: &Path, output: &Path) -> Vec<String> {
-    vec![
-        "-loop".into(), "1".into(),   // ✅ Loop image indefinitely
-        "-i".into(), path(image),     // Image input (looped)
-        "-i".into(), path(media),     // Audio input
-        "-c:v".into(), CODEC_H264.into(),
-        "-preset".into(), PRESET_ULTRAFAST.into(),
-        "-crf".into(), CRF_DEFAULT.into(),
-        "-c:a".into(), CODEC_COPY.into(),
-        "-shortest".into(),           // Stop when shortest input ends
-        "-y".into(),
+    args![
+        "-loop", "1",   // ✅ Loop image indefinitely
+        "-i", path(image),     // Image input (looped)
+        "-i", path(media),     // Audio input
+        "-c:v", CODEC_H264,
+        "-preset", PRESET_ULTRAFAST,
+        "-crf", CRF_DEFAULT,
+        "-c:a", CODEC_COPY,
+        "-shortest",           // Stop when shortest input ends
+        "-y",
         path(output),
     ]
 }
 
 /// Attach a JPEG as an MP4 thumbnail.
 pub fn attach_thumbnail(video: &Path, image: &Path, output: &Path) -> Vec<String> {
-    vec![
-        "-i".into(),
+    args![
+        "-i",
         path(video),
-        "-i".into(),
+        "-i",
         path(image),
-        "-map".into(),
-        "0:v".into(),
-        "-map".into(),
-        "0:a?".into(),
-        "-map".into(),
-        "1:v:0".into(),
-        "-c".into(),
-        CODEC_COPY.into(),
-        "-disposition:v:1".into(),
-        "attached_pic".into(),
-        "-y".into(),
+        "-map",
+        "0:v",
+        "-map",
+        "0:a?",
+        "-map",
+        "1:v:0",
+        "-c",
+        CODEC_COPY,
+        "-disposition:v:1",
+        "attached_pic",
+        "-y",
         path(output),
     ]
 }
@@ -273,7 +292,7 @@ fn path(path: &Path) -> String {
 
 /// Returns `-y` or `-n` based on the `force` flag.
 fn overwrite(force: bool) -> Vec<String> {
-    vec![if force { "-y" } else { "-n" }.into()]
+    args![if force { "-y" } else { "-n" }]
 }
 
 #[cfg(test)]
