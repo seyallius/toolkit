@@ -81,17 +81,17 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
         (
             "Removing existing thumbnail".into(),
             SpinnerStyle::Pulse,
-            args::strip_thumbnail(&video, &temp_clean),
+            args::strip_thumbnail_args(&video, &temp_clean),
         ),
         (
             "Encoding video with image".into(),
             SpinnerStyle::Earth,
-            args::encode_loop(&temp_jpg, &temp_clean, &temp_video),
+            args::encode_loop_args(&temp_jpg, &temp_clean, &temp_video),
         ),
         (
             "Adding thumbnail".into(),
             SpinnerStyle::Dots,
-            args::attach_thumbnail(&temp_video, &temp_jpg, &output),
+            args::attach_thumbnail_args(&temp_video, &temp_jpg, &output),
         ),
     ];
     for (index, (label, style, command)) in steps.into_iter().enumerate() {

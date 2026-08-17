@@ -201,34 +201,26 @@ pub fn encode_mp4(
 }
 
 /// Convert an image to an even-dimension JPEG.
+#[rustfmt::skip]
 pub fn image_to_jpg(input: &Path, output: &Path) -> Vec<String> {
     args![
-        "-i",
-        path(input),
-        "-vf",
-        VF_SCALE_EVEN_ONLY,
-        "-pix_fmt",
-        PIX_FMT_YUVJ420P,
-        "-y",
-        path(output),
+        "-i", path(input),
+        "-vf", VF_SCALE_EVEN_ONLY,
+        "-pix_fmt", PIX_FMT_YUVJ420P,
+        "-y", path(output),
     ]
 }
 
 /// Copy A/V streams and omit attached pictures/metadata.
-pub fn strip_thumbnail(input: &Path, output: &Path) -> Vec<String> {
+/// It returns arguments to copy streams without metadata.
+/// Removes existing embedded thumbnails while preserving A/V content.
+#[rustfmt::skip]
+pub fn strip_thumbnail_args(input: &Path, output: &Path) -> Vec<String> {
     args![
-        "-i",
-        path(input),
-        "-map",
-        "0:v",
-        "-map",
-        "0:a?",
-        "-map_metadata",
-        "-1",
-        "-c",
-        CODEC_COPY,
-        "-y",
-        path(output),
+        "-i", path(input),
+        "-map", "0:v", "-map", "0:a",
+        "-c", CODEC_COPY,
+        "-y", path(output),
     ]
 }
 
@@ -244,42 +236,34 @@ pub fn strip_thumbnail(input: &Path, output: &Path) -> Vec<String> {
 /// * `output` - Destination path for the encoded MP4.
 ///
 /// # Returns
-/// Vector of FFmpeg CLI arguments ready for process execution.
+/// Vector of FFmpeg CLI arguments ready to create a video from a still image.
 #[rustfmt::skip]
-pub fn encode_loop(image: &Path, media: &Path, output: &Path) -> Vec<String> {
+pub fn encode_loop_args(image: &Path, media: &Path, output: &Path) -> Vec<String> {
     args![
-        "-loop", "1",   // ✅ Loop image indefinitely
-        "-i", path(image),     // Image input (looped)
-        "-i", path(media),     // Audio input
-        "-c:v", CODEC_H264,
-        "-preset", PRESET_ULTRAFAST,
-        "-crf", CRF_DEFAULT,
-        "-c:a", CODEC_COPY,
-        "-shortest",           // Stop when shortest input ends
-        "-y",
-        path(output),
+        "-loop", "1", "-i", path(image),
+        "-i", path(media),
+        "-c:v", CODEC_H264, "-preset", PRESET_ULTRAFAST, "-crf", CRF_DEFAULT,
+        "-c:a", CODEC_COPY, "-shortest",
+        "-y", path(output),
     ]
 }
 
 /// Attach a JPEG as an MP4 thumbnail.
-pub fn attach_thumbnail(video: &Path, image: &Path, output: &Path) -> Vec<String> {
+///
+/// It Sets proper disposition for media player thumbnail recognition.
+///
+/// # Returns
+/// Vector of FFmpeg CLI arguments ready to embed an image as attached_pic.
+#[rustfmt::skip]
+pub fn attach_thumbnail_args(video: &Path, image: &Path, output: &Path) -> Vec<String> {
     args![
-        "-i",
-        path(video),
-        "-i",
-        path(image),
-        "-map",
-        "0:v",
-        "-map",
-        "0:a?",
-        "-map",
-        "1:v:0",
-        "-c",
-        CODEC_COPY,
-        "-disposition:v:1",
-        "attached_pic",
-        "-y",
-        path(output),
+        "-i", path(video), "-i", path(image),
+        "-map", "0:v",
+        "-map", "0:a?",
+        "-map", "1",
+        "-c", CODEC_COPY,
+        "-disposition:v:1", "attached_pic",
+        "-y", path(output),
     ]
 }
 
