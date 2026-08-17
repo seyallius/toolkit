@@ -16,7 +16,17 @@ cross-platform media conversion workflows with progress feedback and batch proce
 
 ## 📦 Installation
 
-### From crates.io (Recommended)
+### Pre-built Binary (Fastest)
+
+```bash
+# Install cargo-binstall first if you haven't
+cargo install cargo-binstall
+
+# Then install toolkitrs instantly
+cargo binstall toolkitrs
+```
+
+### From crates.io (Compile from source)
 
 ```bash
 cargo install toolkitrs

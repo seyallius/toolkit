@@ -1,3 +1,6 @@
+# .github/workflows/release-assets.yml
+# Builds and uploads release binaries with standard Rust target triple naming.
+# This naming convention enables automatic discovery by cargo-binstall.
 name: Build & Release Binaries
 
 on:
@@ -17,15 +20,12 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact_name: toolkitrs-linux-x86_64
 
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact_name: toolkitrs-windows-x86_64.exe
 
           - target: x86_64-apple-darwin
             os: macos-latest
-            artifact_name: toolkitrs-macos-x86_64
 
     steps:
       - uses: actions/checkout@v6
@@ -38,20 +38,26 @@ jobs:
 
       - name: Package binary
         shell: bash
+        env:
+          VERSION: ${{ github.ref_name }}
         run: |
           BIN="target/${{ matrix.target }}/release/toolkitrs"
           [[ "${{ matrix.target }}" == *windows* ]] && BIN="$BIN.exe"
 
+          # Standard naming: {crate}-{version}-{target}.{ext}
+          ARTIFACT="toolkitrs-${VERSION}-${{ matrix.target }}"
+
           if [[ "${{ matrix.target }}" == *windows* ]]; then
-            7z a "${{ matrix.artifact_name }}.zip" "$BIN"
+            7z a "${ARTIFACT}.zip" "$BIN"
           else
-            tar czf "${{ matrix.artifact_name }}.tar.gz" -C "$(dirname "$BIN")" "$(basename "$BIN")"
+            tar czf "${ARTIFACT}.tar.gz" -C "$(dirname "$BIN")" "$(basename "$BIN")"
           fi
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_name }}.*
+          # Use unique artifact names per target to avoid collisions
+          name: toolkitrs-${{ github.ref_name }}-${{ matrix.target }}
+          path: toolkitrs-*.*
 
   create-release:
     needs: build-binaries
@@ -59,10 +65,13 @@ jobs:
 
     steps:
       - uses: actions/download-artifact@v4
+        with:
+          pattern: toolkitrs-*
+          merge-multiple: true
 
       - uses: softprops/action-gh-release@v2
         with:
           files: |
-            **/*.tar.gz
-            **/*.zip
+            toolkitrs-*.tar.gz
+            toolkitrs-*.zip
           generate_release_notes: true
