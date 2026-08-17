@@ -17,15 +17,15 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            artifact_name: treeclip-linux-x86_64
+            artifact_name: toolkitrs-linux-x86_64
 
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            artifact_name: treeclip-windows-x86_64.exe
+            artifact_name: toolkitrs-windows-x86_64.exe
 
           - target: x86_64-apple-darwin
             os: macos-latest
-            artifact_name: treeclip-macos-x86_64
+            artifact_name: toolkitrs-macos-x86_64
 
     steps:
       - uses: actions/checkout@v6
@@ -39,7 +39,7 @@ jobs:
       - name: Package binary
         shell: bash
         run: |
-          BIN="target/${{ matrix.target }}/release/treeclip"
+          BIN="target/${{ matrix.target }}/release/toolkitrs"
           [[ "${{ matrix.target }}" == *windows* ]] && BIN="$BIN.exe"
 
           if [[ "${{ matrix.target }}" == *windows* ]]; then
