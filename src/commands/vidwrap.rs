@@ -15,30 +15,23 @@ use std::{
     io::{self, BufReader},
     path::{Path, PathBuf},
 };
-use tempfile::Builder;
 
 // --------------------------------- Types, Constants & Variables ------------------------------- //
 
 /// Total number of steps in the vidwrap workflow.
-const TOTAL_STEPS: usize = 4;
+const TOTAL_STEPS: usize = 1;
 
 /// Default choice index for post-processing prompt (1‑based).
 const DEFAULT_POST_CHOICE: usize = 2;
 
-/// Prefix for temporary JPG files.
-const TEMP_IMAGE_PREFIX: &str = "toolkit-image-";
+/// Default output width for the generated video.
+const WIDTH: u16 = 1980;
 
-/// Prefix for temporary cleaned video files.
-const TEMP_CLEAN_PREFIX: &str = "toolkit-clean-";
+/// Default output height for the generated video.
+const HEIGHT: u16 = 1080;
 
-/// Prefix for temporary video files.
-const TEMP_VIDEO_PREFIX: &str = "toolkit-video-";
-
-/// Suffix for temporary JPG files.
-const TEMP_IMAGE_SUFFIX: &str = ".jpg";
-
-/// Suffix for temporary video files.
-const TEMP_VIDEO_SUFFIX: &str = ".mp4";
+/// Default frames per second for the generated video.
+const FRAME_RATE: u8 = 30;
 
 /// Arguments for the `vidwrap` subcommand.
 #[derive(Debug, Args)]
@@ -50,8 +43,7 @@ pub struct VidwrapArgs {
 
 // ----------------------------------------- Public API ----------------------------------------- //
 
-/// Runs the vidwrap workflow: converts companion image, strips existing thumbnail,
-/// encodes video with image, and attaches thumbnail.
+/// Runs the vidwrap workflow: creates a static image video with audio from the original.
 pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Result<()> {
     let video = args_cli
         .video
@@ -69,31 +61,13 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
         .context("video has no stem")?
         .to_string_lossy();
     let output = dir.join(format!("{stem}_with_image.mp4"));
-    let temp_jpg = temp_in(dir, TEMP_IMAGE_PREFIX, TEMP_IMAGE_SUFFIX)?;
-    let temp_clean = temp_in(dir, TEMP_CLEAN_PREFIX, TEMP_VIDEO_SUFFIX)?;
-    let temp_video = temp_in(dir, TEMP_VIDEO_PREFIX, TEMP_VIDEO_SUFFIX)?;
-    let steps: [(String, SpinnerStyle, Vec<String>); 4] = [
-        (
-            "Converting image to JPG".into(),
-            SpinnerStyle::Bounce,
-            args::image_to_jpg(&image, &temp_jpg),
-        ),
-        (
-            "Removing existing thumbnail".into(),
-            SpinnerStyle::Pulse,
-            args::strip_thumbnail_args(&video, &temp_clean),
-        ),
-        (
-            "Encoding video with image".into(),
-            SpinnerStyle::Earth,
-            args::encode_loop_args(&temp_jpg, &temp_clean, &temp_video),
-        ),
-        (
-            "Adding thumbnail".into(),
-            SpinnerStyle::Dots,
-            args::attach_thumbnail_args(&temp_video, &temp_jpg, &output),
-        ),
-    ];
+
+    let steps: [(String, SpinnerStyle, Vec<String>); TOTAL_STEPS] = [(
+        "Creating video with static image".to_string(),
+        SpinnerStyle::Bounce,
+        args::replace_video_with_image(&image, &video, &output, WIDTH, HEIGHT, FRAME_RATE),
+    )];
+
     for (index, (label, style, command)) in steps.into_iter().enumerate() {
         println!("{}", progress::render(index + 1, TOTAL_STEPS, &label));
         let spin = Spinner::start(style, label.clone(), false);
@@ -101,33 +75,19 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
         spin.stop();
         if let Err(error) = result {
             eprintln!(
-                "Failed; temporary files were kept for debugging: {}, {}, {}",
-                temp_jpg.display(),
-                temp_clean.display(),
-                temp_video.display()
+                "Failed; output file may be incomplete: {}",
+                output.display()
             );
             return Err(error);
         }
         println!("  Success");
     }
-    for path in [&temp_jpg, &temp_clean, &temp_video] {
-        let _ = fs::remove_file(path);
-    }
+
     println!("Output: {}", output.display());
     post_process(&video, &image, &output)
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //
-
-/// Creates a temporary file path in the given directory.
-fn temp_in(dir: &Path, prefix: &str, suffix: &str) -> Result<PathBuf> {
-    let (_, path) = Builder::new()
-        .prefix(prefix)
-        .suffix(suffix)
-        .tempfile_in(dir)?
-        .keep()?;
-    Ok(path)
-}
 
 /// Prompts the user for post-processing actions on the original video and image.
 fn post_process(original: &Path, image: &Path, new_video: &Path) -> Result<()> {

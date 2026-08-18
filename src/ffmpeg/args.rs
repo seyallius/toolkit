@@ -267,6 +267,70 @@ pub fn attach_thumbnail_args(video: &Path, image: &Path, output: &Path) -> Vec<S
     ]
 }
 
+/// Replace video stream with a static image while preserving audio.
+///
+/// Takes a video file and an image, creates a new video where the image is displayed
+/// for the entire duration of the original video's audio track. The image is scaled
+/// to fit within the target dimensions while preserving aspect ratio, then padded
+/// to exactly fill the frame. Useful for creating static visualizers or replacing
+/// video content while keeping the audio.
+///
+/// # Arguments
+/// * `image` - Path to the source image to use as the static video.
+/// * `video` - Path to the source video file providing the audio stream.
+/// * `output` - Destination path for the encoded video.
+/// * `width` - Target width for the output video.
+/// * `height` - Target height for the output video.
+/// * `framerate` - Frames per second for the output video.
+///
+/// # Returns
+/// Vector of FFmpeg CLI arguments ready to replace video with a static image.
+///
+/// # Example
+/// ```
+/// let args = replace_video_with_image(
+///     Path::new("thumbnail.png"),
+///     Path::new("input_video.mp4"),
+///     Path::new("output.mp4"),
+///     1920,
+///     1080,
+///     30,
+/// );
+/// ```
+#[rustfmt::skip]
+pub fn replace_video_with_image(
+    image: &Path,
+    video: &Path,
+    output: &Path,
+    width: u16,
+    height: u16,
+    framerate: u8,
+) -> Vec<String> {
+    let scale_filter = format!(
+        "scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:black",
+        width, height, width, height
+    );
+
+    args![
+        "-loop", "1",
+        "-framerate", framerate.to_string(),
+        "-i", path(image),
+        "-i", path(video),
+        "-map", "0:v",
+        "-map", "1:a",
+        "-vf", scale_filter,
+        "-c:v", CODEC_H264,
+        "-preset", PRESET_ULTRAFAST,
+        "-tune", TUNE_STILLIMAGE,
+        "-pix_fmt", PIX_FMT_YUV420P,
+        "-c:a", CODEC_COPY,
+        "-movflags", MOVFLAGS_FASTSTART,
+        "-shortest",
+        "-y",
+        path(output),
+    ]
+}
+
 // -------------------------------------- Internal Helpers -------------------------------------- //
 
 /// Converts a path to a lossy string suitable for FFmpeg arguments.
