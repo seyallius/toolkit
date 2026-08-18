@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4](https://github.com/seyallius/toolkit/compare/v0.1.3...v0.1.4) - 2026-08-18
+
+### Fixed
+
+- *(vidwrap)* simplify to single FFmpeg invocation for static image video
+- *(vidwrap)* correct FFmpeg mapping flags to match working Go version
+
+### Other
+
+- *(vidwrap)* configurable video generation with functional options
+- *(ffmpeg)* introduce args! macro to reduce Vec<String> boilerplate
+
 ## [0.1.3](https://github.com/seyallius/toolkit/compare/v0.1.2...v0.1.3) - 2026-08-17
 
 ### Other
