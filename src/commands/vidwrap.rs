@@ -24,15 +24,6 @@ const TOTAL_STEPS: usize = 1;
 /// Default choice index for post-processing prompt (1‑based).
 const DEFAULT_POST_CHOICE: usize = 2;
 
-/// Default output width for the generated video.
-const WIDTH: u16 = 1980;
-
-/// Default output height for the generated video.
-const HEIGHT: u16 = 1080;
-
-/// Default frames per second for the generated video.
-const FRAME_RATE: u8 = 30;
-
 /// Arguments for the `vidwrap` subcommand.
 #[derive(Debug, Args)]
 pub struct VidwrapArgs {
@@ -65,7 +56,7 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
     let steps: [(String, SpinnerStyle, Vec<String>); TOTAL_STEPS] = [(
         "Creating video with static image".to_string(),
         SpinnerStyle::Bounce,
-        args::replace_video_with_image(&image, &video, &output, WIDTH, HEIGHT, FRAME_RATE),
+        args::replace_video_with_image(&image, &video, &output, &[]),
     )];
 
     for (index, (label, style, command)) in steps.into_iter().enumerate() {

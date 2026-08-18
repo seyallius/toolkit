@@ -80,6 +80,44 @@ const MOVFLAGS_FASTSTART: &str = "+faststart";
 /// Constant rate factor for x264 encoding.
 const CRF_DEFAULT: &str = "23";
 
+/// Default output width for the generated video.
+const WIDTH: u16 = 1980;
+
+/// Default output height for the generated video.
+const HEIGHT: u16 = 1080;
+
+/// Default frames per second for the generated video.
+const FRAME_RATE: u8 = 30;
+
+/// Configuration for video generation parameters.
+///
+/// Contains the dimensions and framerate settings used when creating a static image video.
+/// Default values are provided for all fields.
+#[derive(Debug, Clone)]
+pub struct VideoConfig {
+    /// Target width in pixels (default: 1980)
+    pub width: u16,
+    /// Target height in pixels (default: 1080)
+    pub height: u16,
+    /// Frames per second (default: 30)
+    pub framerate: u8,
+}
+impl Default for VideoConfig {
+    fn default() -> Self {
+        Self {
+            width: WIDTH,
+            height: HEIGHT,
+            framerate: FRAME_RATE,
+        }
+    }
+}
+
+/// A function type that modifies a `VideoConfig` instance.
+///
+/// Used with the functional options pattern to apply one or more
+/// configuration overrides to the default video settings.
+pub type VideoOption = Box<dyn Fn(&mut VideoConfig)>;
+
 // ----------------------------------------- Public API ----------------------------------------- //
 
 /// Stream-copy a transport stream into an MP4 container.
@@ -267,7 +305,7 @@ pub fn attach_thumbnail_args(video: &Path, image: &Path, output: &Path) -> Vec<S
     ]
 }
 
-/// Replace video stream with a static image while preserving audio.
+/// Replaces a video stream with a static image while preserving audio.
 ///
 /// Takes a video file and an image, creates a new video where the image is displayed
 /// for the entire duration of the original video's audio track. The image is scaled
@@ -276,25 +314,46 @@ pub fn attach_thumbnail_args(video: &Path, image: &Path, output: &Path) -> Vec<S
 /// video content while keeping the audio.
 ///
 /// # Arguments
-/// * `image` - Path to the source image to use as the static video.
-/// * `video` - Path to the source video file providing the audio stream.
-/// * `output` - Destination path for the encoded video.
-/// * `width` - Target width for the output video.
-/// * `height` - Target height for the output video.
-/// * `framerate` - Frames per second for the output video.
+/// * `image` - Path to the source image to use as the static video
+/// * `video` - Path to the source video file providing the audio stream
+/// * `output` - Destination path for the encoded video
+/// * `options` - Slice of `VideoOption` functions to override default settings
 ///
 /// # Returns
 /// Vector of FFmpeg CLI arguments ready to replace video with a static image.
 ///
-/// # Example
+/// # Defaults
+/// If no options are provided, the following defaults are used:
+/// - Width: 1980 pixels
+/// - Height: 1080 pixels
+/// - Framerate: 30 fps
+///
+/// # Examples
 /// ```
+/// use std::path::Path;
+///
+/// // Use all defaults
 /// let args = replace_video_with_image(
 ///     Path::new("thumbnail.png"),
 ///     Path::new("input_video.mp4"),
 ///     Path::new("output.mp4"),
-///     1920,
-///     1080,
-///     30,
+///     &[],  // No options = defaults
+/// );
+///
+/// // Override only the width
+/// let args = replace_video_with_image(
+///     Path::new("thumbnail.png"),
+///     Path::new("input_video.mp4"),
+///     Path::new("output.mp4"),
+///     &[with_width(1920)],
+/// );
+///
+/// // Override multiple parameters
+/// let args = replace_video_with_image(
+///     Path::new("thumbnail.png"),
+///     Path::new("input_video.mp4"),
+///     Path::new("output.mp4"),
+///     &[with_width(1280), with_height(720), with_framerate(60)],
 /// );
 /// ```
 #[rustfmt::skip]
@@ -302,18 +361,21 @@ pub fn replace_video_with_image(
     image: &Path,
     video: &Path,
     output: &Path,
-    width: u16,
-    height: u16,
-    framerate: u8,
+    options: &[VideoOption],
 ) -> Vec<String> {
+    let mut config = VideoConfig::default();
+    for opt in options {
+        opt(&mut config);
+    }
+
     let scale_filter = format!(
         "scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:black",
-        width, height, width, height
+        config.width, config.height, config.width, config.height
     );
 
     args![
         "-loop", "1",
-        "-framerate", framerate.to_string(),
+        "-framerate", config.framerate.to_string(),
         "-i", path(image),
         "-i", path(video),
         "-map", "0:v",
@@ -329,6 +391,48 @@ pub fn replace_video_with_image(
         "-y",
         path(output),
     ]
+}
+
+/// Sets the output video width.
+///
+/// # Arguments
+/// * `w` - Width in pixels
+///
+/// # Example
+/// ```
+/// let opts = &[with_width(1280)];
+/// replace_video_with_image(&image, &video, &output, opts);
+/// ```
+pub fn with_width(w: u16) -> VideoOption {
+    Box::new(move |cfg| cfg.width = w)
+}
+
+/// Sets the output video height.
+///
+/// # Arguments
+/// * `h` - Height in pixels
+///
+/// # Example
+/// ```
+/// let opts = &[with_height(720)];
+/// replace_video_with_image(&image, &video, &output, opts);
+/// ```
+pub fn with_height(h: u16) -> VideoOption {
+    Box::new(move |cfg| cfg.height = h)
+}
+
+/// Sets the output video framerate.
+///
+/// # Arguments
+/// * `f` - Frames per second
+///
+/// # Example
+/// ```
+/// let opts = &[with_framerate(60)];
+/// replace_video_with_image(&image, &video, &output, opts);
+/// ```
+pub fn with_framerate(f: u8) -> VideoOption {
+    Box::new(move |cfg| cfg.framerate = f)
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //
