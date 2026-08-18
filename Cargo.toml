@@ -10,7 +10,7 @@ documentation = "https://docs.rs/toolkitrs"
 readme = "README.md"
 keywords = ["ffmpeg", "media", "cli", "batch", "video"]
 categories = ["command-line-utilities", "multimedia::video", "multimedia::audio"]
-exclude = ["bck/*", ".github/*"]
+exclude = ["bck/*", ".github/*", "bash/*"]
 
 [dependencies]
 anyhow = "1.0"
