@@ -1,7 +1,7 @@
 //! module batch - Generic batch processing pipeline for media conversion commands.
-//! Provides a generic batch processing pipeline for media conversion commands.
 
 use crate::{
+    components::banner,
     ffmpeg::{Ffmpeg, ProcessRunner},
     util::{
         files,
@@ -9,18 +9,13 @@ use crate::{
     },
 };
 use anyhow::{bail, Result};
-use std::path::{Path, PathBuf};
+use console::Style;
+use std::{
+    io::{self, IsTerminal},
+    path::{Path, PathBuf},
+};
 
 // --------------------------------- Types, Constants & Variables ------------------------------- //
-
-/// Status prefix printed for successfully converted files.
-const STATUS_SUCCESS: &str = "SUCCESS";
-
-/// Status prefix printed for skipped files.
-const STATUS_SKIPPED: &str = "SKIPPED";
-
-/// Status prefix printed for failed files.
-const STATUS_FAILED: &str = "FAILED";
 
 /// Warning prefix printed for invalid inputs.
 const WARNING_PREFIX: &str = "WARNING";
@@ -67,12 +62,47 @@ pub fn run_batch<R: ProcessRunner, T: BatchTask>(
     force: bool,
     ffmpeg: &Ffmpeg<R>,
 ) -> Result<()> {
+    // Print a beautiful TTY-aware banner at the start of the batch job
+    println!(
+        "{}",
+        banner::render(
+            task.file_type_name(),
+            Some("Batch Processing"),
+            console::colors_enabled()
+        )
+    );
+
     output::ensure_directory(output_dir)?;
     let inputs = collect_inputs(
         explicit_files,
         task.input_extension(),
         task.file_type_name(),
     )?;
+
+    let is_tty = io::stdout().is_terminal();
+
+    let (success_tag, skipped_tag, failed_tag) = if is_tty {
+        (
+            Style::new()
+                .green()
+                .bold()
+                .apply_to("✔ SUCCESS")
+                .to_string(),
+            Style::new()
+                .yellow()
+                .bold()
+                .apply_to("⏭ SKIPPED")
+                .to_string(),
+            Style::new().red().bold().apply_to("✖ FAILED").to_string(),
+        )
+    } else {
+        // Log-friendly format for CI/CD and file redirection
+        (
+            "[SUCCESS]".to_string(),
+            "[SKIPPED]".to_string(),
+            "[FAILED]".to_string(),
+        )
+    };
 
     let mut succeeded = 0;
     let mut skipped = 0;
@@ -82,22 +112,22 @@ pub fn run_batch<R: ProcessRunner, T: BatchTask>(
         let out = output::output_path(&input, output_dir, task.output_extension())?;
 
         if output::decision(&out, force) == OutputDecision::SkipExisting {
-            println!("{STATUS_SKIPPED}: {} already exists", out.display());
+            println!("{skipped_tag}: {} already exists", out.display());
             skipped += 1;
             continue;
         }
 
         match task.process_file(&input, &out, ffmpeg) {
             Ok(FileOutcome::Success) => {
-                println!("{STATUS_SUCCESS}: {}", out.display());
+                println!("{success_tag}: {}", out.display());
                 succeeded += 1;
             }
             Ok(FileOutcome::Skipped(reason)) => {
-                println!("{STATUS_SKIPPED}: {reason}");
+                println!("{skipped_tag}: {reason}");
                 skipped += 1;
             }
             Err(error) => {
-                eprintln!("{STATUS_FAILED}: {}: {error}", input.display());
+                eprintln!("{failed_tag}: {}: {error}", input.display());
                 failed += 1;
             }
         }

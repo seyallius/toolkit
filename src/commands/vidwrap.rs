@@ -2,7 +2,7 @@
 
 use crate::{
     components::{
-        progress, prompt,
+        banner, progress, prompt,
         spinner::{Spinner, SpinnerStyle},
     },
     ffmpeg::{args, Ffmpeg, ProcessRunner},
@@ -39,6 +39,15 @@ pub struct VidwrapArgs {
 ///
 /// Adapts its success output based on whether the spinner was enabled (TTY vs piped).
 pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Result<()> {
+    println!(
+        "{}",
+        banner::render(
+            "Vidwrap",
+            Some("Video + Image wrapper"),
+            console::colors_enabled()
+        )
+    );
+
     let video = args_cli
         .video
         .canonicalize()
@@ -70,7 +79,6 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
         let spin = Spinner::start(style, label.clone(), false);
         let result = ffmpeg.run(command);
 
-        // Capture terminal state before stopping the spinner
         let was_enabled = spin.enabled();
         spin.stop();
 
@@ -82,7 +90,6 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
             return Err(error);
         }
 
-        // Adaptive UI: rich output for terminals, plain text for logs/CI
         if was_enabled {
             let green = Style::new().green().bold();
             println!("  {} Success", green.apply_to("✔"));

@@ -1,6 +1,7 @@
 //! module banner - Renders a boxed heading for command output.
 
 use console::Style;
+use std::io::{self, IsTerminal};
 
 // ----------------------------------------- Public API ----------------------------------------- //
 
@@ -12,13 +13,18 @@ use console::Style;
 /// * `color` - Whether to apply ANSI color styling.
 ///
 /// # Returns
-/// A string containing the boxed banner.
-#[allow(dead_code)]
+/// A string containing the boxed banner (or a simple separator if piped).
 pub fn render(title: &str, subtitle: Option<&str>, color: bool) -> String {
     let content = match subtitle {
         Some(value) => format!("{title} — {value}"),
         None => title.to_owned(),
     };
+
+    // If piped to a file/CI, don't use multi-line unicode boxes
+    if !io::stdout().is_terminal() {
+        return format!("== {content} ==");
+    }
+
     let border = "═".repeat(content.chars().count() + 2);
     let title = if color {
         Style::new().cyan().bold().apply_to(content).to_string()

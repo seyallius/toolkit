@@ -1,6 +1,6 @@
 //! module prompt - Interactive user prompts with injectable streams.
 
-use std::io::{BufRead, Write};
+use std::io::{self, BufRead, IsTerminal, Write};
 
 // ----------------------------------------- Public API ----------------------------------------- //
 
@@ -27,6 +27,7 @@ pub fn parse_choice(value: &str, choices: usize, default: usize) -> usize {
 /// Prompt for a choice from a list, using injectable input/output streams.
 ///
 /// It is written with injectable streams, keeping interactive code testable.
+/// Automatically falls back to the default choice if stdin is not a terminal (CI/CD safety).
 ///
 /// # Arguments
 /// * `input` - Readable stream for user input.
@@ -43,13 +44,25 @@ pub fn choice<R: BufRead, W: Write>(
     question: &str,
     options: &[&str],
     default: usize,
-) -> std::io::Result<usize> {
+) -> io::Result<usize> {
+    // CI/CD Safety: If stdin isn't a terminal, we can't wait for user input.
+    // Auto-select the default to prevent the pipeline from hanging indefinitely.
+    if !io::stdin().is_terminal() {
+        writeln!(output, "{question}")?;
+        writeln!(
+            output,
+            "  ⚙️  Non-interactive mode detected. Auto-selecting default: {default}"
+        )?;
+        return Ok(default);
+    }
+
     writeln!(output, "{question}")?;
     for (index, option) in options.iter().enumerate() {
         writeln!(output, "  {}. {option}", index + 1)?;
     }
     write!(output, "Choice [{default}]: ")?;
     output.flush()?;
+
     let mut line = String::new();
     input.read_line(&mut line)?;
     Ok(parse_choice(&line, options.len(), default))
