@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6](https://github.com/seyallius/toolkit/compare/v0.1.5...v0.1.6) - 2026-08-19
+
+### Added
+
+- *(ui)* add TTY-aware banners and CI/CD-safe prompts
+- *(vidwrap)* adapt success output to terminal state
+
 ## [0.1.5](https://github.com/seyallius/toolkit/compare/v0.1.4...v0.1.5) - 2026-08-18
 
 ### Other
