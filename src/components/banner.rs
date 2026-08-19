@@ -13,6 +13,7 @@ use console::Style;
 ///
 /// # Returns
 /// A string containing the boxed banner.
+#[allow(dead_code)]
 pub fn render(title: &str, subtitle: Option<&str>, color: bool) -> String {
     let content = match subtitle {
         Some(value) => format!("{title} — {value}"),

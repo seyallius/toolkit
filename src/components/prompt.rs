@@ -5,6 +5,7 @@ use std::io::{BufRead, Write};
 // ----------------------------------------- Public API ----------------------------------------- //
 
 /// Parse a yes/no response, falling back to `default` for unknown input.
+#[allow(dead_code)]
 pub fn parse_yes_no(value: &str, default: bool) -> bool {
     match value.trim().to_ascii_lowercase().as_str() {
         "y" | "yes" => true,

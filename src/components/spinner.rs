@@ -16,6 +16,7 @@ use std::{
 const SPINNER_DELAY_MS: u64 = 200;
 
 /// Supported spinner frame sequences.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy)]
 pub enum SpinnerStyle {
     Dots,

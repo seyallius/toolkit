@@ -10,6 +10,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use clap::Args;
+use console::Style;
 use std::{
     fs,
     io::{self, BufReader},
@@ -21,7 +22,7 @@ use std::{
 /// Total number of steps in the vidwrap workflow.
 const TOTAL_STEPS: usize = 1;
 
-/// Default choice index for post-processing prompt (1‑based).
+/// Default choice index for post-processing prompt (1-based).
 const DEFAULT_POST_CHOICE: usize = 2;
 
 /// Arguments for the `vidwrap` subcommand.
@@ -35,17 +36,21 @@ pub struct VidwrapArgs {
 // ----------------------------------------- Public API ----------------------------------------- //
 
 /// Runs the vidwrap workflow: creates a static image video with audio from the original.
+///
+/// Adapts its success output based on whether the spinner was enabled (TTY vs piped).
 pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Result<()> {
     let video = args_cli
         .video
         .canonicalize()
         .with_context(|| format!("video file not found: {}", args_cli.video.display()))?;
     let image = files::companion_image(&video)?;
+
     println!(
         "Found image: {}\nFound video: {}",
         image.display(),
         video.display()
     );
+
     let dir = video.parent().context("video has no parent")?;
     let stem = video
         .file_stem()
@@ -61,9 +66,14 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
 
     for (index, (label, style, command)) in steps.into_iter().enumerate() {
         println!("{}", progress::render(index + 1, TOTAL_STEPS, &label));
+
         let spin = Spinner::start(style, label.clone(), false);
         let result = ffmpeg.run(command);
+
+        // Capture terminal state before stopping the spinner
+        let was_enabled = spin.enabled();
         spin.stop();
+
         if let Err(error) = result {
             eprintln!(
                 "Failed; output file may be incomplete: {}",
@@ -71,7 +81,14 @@ pub fn run<R: ProcessRunner>(args_cli: VidwrapArgs, ffmpeg: &Ffmpeg<R>) -> Resul
             );
             return Err(error);
         }
-        println!("  Success");
+
+        // Adaptive UI: rich output for terminals, plain text for logs/CI
+        if was_enabled {
+            let green = Style::new().green().bold();
+            println!("  {} Success", green.apply_to("✔"));
+        } else {
+            println!("  [OK] Success");
+        }
     }
 
     println!("Output: {}", output.display());
@@ -85,6 +102,7 @@ fn post_process(original: &Path, image: &Path, new_video: &Path) -> Result<()> {
     let stdin = io::stdin();
     let mut input = BufReader::new(stdin.lock());
     let mut stdout = io::stdout();
+
     let choice = prompt::choice(
         &mut input,
         &mut stdout,
@@ -96,6 +114,7 @@ fn post_process(original: &Path, image: &Path, new_video: &Path) -> Result<()> {
         ],
         DEFAULT_POST_CHOICE,
     )?;
+
     match choice {
         1 => {
             fs::remove_file(original)?;
@@ -110,5 +129,6 @@ fn post_process(original: &Path, image: &Path, new_video: &Path) -> Result<()> {
         }
         _ => println!("Kept all files"),
     }
+
     Ok(())
 }

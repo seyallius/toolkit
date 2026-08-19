@@ -1,4 +1,5 @@
 //! module args - Builders for FFmpeg command-line arguments.
+#![allow(dead_code)]
 
 use std::path::Path;
 
