@@ -123,39 +123,36 @@ pub type VideoOption = Box<dyn Fn(&mut VideoConfig)>;
 
 /// Stream-copy a transport stream into an MP4 container.
 pub fn remux_copy(input: &Path, output: &Path, force: bool) -> Vec<String> {
-    let mut a = args!["-i", path(input), "-c", CODEC_COPY];
-    a.extend(overwrite(force));
-    a.push(path(output));
-    a
+    FfmpegArgs::new()
+        .input(input)
+        .codec(CODEC_COPY)
+        .overwrite_if(force)
+        .output(output)
+        .build()
 }
 
 /// Extract a single scaled frame for album art.
 pub fn extract_frame(input: &Path, output: &Path, size: u32) -> Vec<String> {
-    args![
-        "-ss",
-        "00:00:01",
-        "-i",
-        path(input),
-        "-frames:v",
-        "1",
-        "-vf",
-        VF_SCALE_SQUARE_TEMPLATE.replace("{size}", &size.to_string()),
-        "-y",
-        path(output),
-    ]
+    let filter = VF_SCALE_SQUARE_TEMPLATE.replace("{size}", &size.to_string());
+    FfmpegArgs::new()
+        .seek("00:00:01")
+        .input(input)
+        .frames("v", 1)
+        .vf(&filter)
+        .overwrite()
+        .output(output)
+        .build()
 }
 
 /// Extract an MP3 attached picture without decoding it.
 pub fn extract_embedded_cover(input: &Path, output: &Path) -> Vec<String> {
-    args![
-        "-i",
-        path(input),
-        "-an",
-        "-vcodec",
-        CODEC_COPY,
-        "-y",
-        path(output),
-    ]
+    FfmpegArgs::new()
+        .input(input)
+        .no_audio() // -an
+        .video_codec(CODEC_COPY)
+        .overwrite()
+        .output(output)
+        .build()
 }
 
 /// Encode the first audio track as tagged MP3, optionally adding cover art.
@@ -166,35 +163,27 @@ pub fn encode_mp3(
     bitrate: u32,
     force: bool,
 ) -> Vec<String> {
-    let mut a = args!["-threads", "auto", "-i", path(input)];
+    let mut builder = FfmpegArgs::new().threads("auto").input(input);
+
     if let Some(cover) = cover {
-        a.extend(["-i".into(), path(cover)]);
+        builder = builder.input(cover);
     }
-    a.extend(args![
-        "-map",
-        "0:a:0",
-        "-c:a",
-        CODEC_MP3,
-        "-b:a",
-        format!("{bitrate}k"),
-        "-id3v2_version",
-        ID3V2_VERSION,
-        "-write_id3v1",
-        WRITE_ID3V1,
-    ]);
+
+    builder = builder
+        .map("0:a:0")
+        .audio_codec(CODEC_MP3)
+        .audio_bitrate(bitrate)
+        .id3v2_version(ID3V2_VERSION)
+        .write_id3v1(true);
+
     if cover.is_some() {
-        a.extend(args![
-            "-map",
-            "1:v:0",
-            "-c:v",
-            CODEC_COPY,
-            "-disposition:v:0",
-            "attached_pic",
-        ]);
+        builder = builder
+            .map("1:v:0")
+            .video_codec(CODEC_COPY)
+            .disposition("v:0", "attached_pic");
     }
-    a.extend(overwrite(force));
-    a.push(path(output));
-    a
+
+    builder.overwrite_if(force).output(output).build()
 }
 
 /// Produce an H.264 MP4 from cover art (or a black video) and MP3 audio.
@@ -205,62 +194,58 @@ pub fn encode_mp4(
     bitrate: u32,
     force: bool,
 ) -> Vec<String> {
-    let mut a = if let Some(image) = image {
-        args!["-loop", "1", "-i", path(image)]
+    let mut builder = FfmpegArgs::new();
+
+    if let Some(image) = image {
+        builder = builder.loop_input(1).input(image);
     } else {
-        args!["-f", FORMAT_LAVFI, "-i", COLOR_FILTER,]
-    };
-    a.extend(args![
-        "-i",
-        path(audio),
-        "-c:v",
-        CODEC_H264,
-        "-preset",
-        PRESET_ULTRAFAST,
-        "-tune",
-        TUNE_STILLIMAGE,
-        "-pix_fmt",
-        PIX_FMT_YUV420P,
-    ]);
-    if image.is_some() {
-        a.extend(args!["-vf", VF_SCALE_EVEN]);
+        builder = builder.lavfi_input(COLOR_FILTER)
     }
-    a.extend(args![
-        "-c:a",
-        CODEC_AAC,
-        "-b:a",
-        format!("{bitrate}k"),
-        "-shortest",
-        "-movflags",
-        MOVFLAGS_FASTSTART,
-    ]);
-    a.extend(overwrite(force));
-    a.push(path(output));
-    a
+
+    builder = builder
+        .input(audio)
+        .video_codec(CODEC_H264)
+        .preset(PRESET_ULTRAFAST)
+        .tune(TUNE_STILLIMAGE)
+        .pix_fmt(PIX_FMT_YUV420P);
+
+    if image.is_some() {
+        builder = builder.vf(VF_SCALE_EVEN);
+    }
+
+    builder
+        .audio_codec(CODEC_AAC)
+        .audio_bitrate(bitrate)
+        .shortest()
+        .movflags(MOVFLAGS_FASTSTART)
+        .overwrite_if(force)
+        .output(output)
+        .build()
 }
 
 /// Convert an image to an even-dimension JPEG.
-#[rustfmt::skip]
 pub fn image_to_jpg(input: &Path, output: &Path) -> Vec<String> {
-    args![
-        "-i", path(input),
-        "-vf", VF_SCALE_EVEN_ONLY,
-        "-pix_fmt", PIX_FMT_YUVJ420P,
-        "-y", path(output),
-    ]
+    FfmpegArgs::new()
+        .input(input)
+        .vf(VF_SCALE_EVEN_ONLY)
+        .pix_fmt(PIX_FMT_YUVJ420P)
+        .overwrite()
+        .output(output)
+        .build()
 }
 
 /// Copy A/V streams and omit attached pictures/metadata.
 /// It returns arguments to copy streams without metadata.
 /// Removes existing embedded thumbnails while preserving A/V content.
-#[rustfmt::skip]
 pub fn strip_thumbnail_args(input: &Path, output: &Path) -> Vec<String> {
-    args![
-        "-i", path(input),
-        "-map", "0:v", "-map", "0:a",
-        "-c", CODEC_COPY,
-        "-y", path(output),
-    ]
+    FfmpegArgs::new()
+        .input(input)
+        .map("0:v")
+        .map("0:a")
+        .codec(CODEC_COPY)
+        .overwrite()
+        .output(output)
+        .build()
 }
 
 /// Encode a looped image with the supplied media's audio.
@@ -268,42 +253,36 @@ pub fn strip_thumbnail_args(input: &Path, output: &Path) -> Vec<String> {
 /// Creates a video where a still image is displayed for the entire
 /// duration of the audio track. Uses ultrafast preset and CRF 23
 /// for quick encoding suitable for thumbnails/previews.
-///
-/// # Arguments
-/// * `image` - Path to the source image (should be even-dimension JPEG).
-/// * `media` - Path to the audio/video source providing the audio stream.
-/// * `output` - Destination path for the encoded MP4.
-///
-/// # Returns
-/// Vector of FFmpeg CLI arguments ready to create a video from a still image.
-#[rustfmt::skip]
 pub fn encode_loop_args(image: &Path, media: &Path, output: &Path) -> Vec<String> {
-    args![
-        "-loop", "1", "-i", path(image),
-        "-i", path(media),
-        "-c:v", CODEC_H264, "-preset", PRESET_ULTRAFAST, "-crf", CRF_DEFAULT,
-        "-c:a", CODEC_COPY, "-shortest",
-        "-y", path(output),
-    ]
+    FfmpegArgs::new()
+        .loop_input(1)
+        .input(image)
+        .input(media)
+        .video_codec(CODEC_H264)
+        .preset(PRESET_ULTRAFAST)
+        .crf(23)
+        .audio_codec(CODEC_COPY)
+        .shortest()
+        .overwrite()
+        .output(output)
+        .build()
 }
 
 /// Attach a JPEG as an MP4 thumbnail.
 ///
 /// It Sets proper disposition for media player thumbnail recognition.
-///
-/// # Returns
-/// Vector of FFmpeg CLI arguments ready to embed an image as attached_pic.
-#[rustfmt::skip]
 pub fn attach_thumbnail_args(video: &Path, image: &Path, output: &Path) -> Vec<String> {
-    args![
-        "-i", path(video), "-i", path(image),
-        "-map", "0:v",
-        "-map", "0:a?",
-        "-map", "1",
-        "-c", CODEC_COPY,
-        "-disposition:v:1", "attached_pic",
-        "-y", path(output),
-    ]
+    FfmpegArgs::new()
+        .input(video)
+        .input(image)
+        .map("0:v")
+        .map("0:a?") // optional audio
+        .map("1")
+        .codec(CODEC_COPY)
+        .disposition("v:1", "attached_pic")
+        .overwrite()
+        .output(output)
+        .build()
 }
 
 /// Replaces a video stream with a static image while preserving audio.
@@ -357,7 +336,6 @@ pub fn attach_thumbnail_args(video: &Path, image: &Path, output: &Path) -> Vec<S
 ///     &[with_width(1280), with_height(720), with_framerate(60)],
 /// );
 /// ```
-#[rustfmt::skip]
 pub fn replace_video_with_image(
     image: &Path,
     video: &Path,
@@ -374,24 +352,24 @@ pub fn replace_video_with_image(
         config.width, config.height, config.width, config.height
     );
 
-    args![
-        "-loop", "1",
-        "-framerate", config.framerate.to_string(),
-        "-i", path(image),
-        "-i", path(video),
-        "-map", "0:v",
-        "-map", "1:a",
-        "-vf", scale_filter,
-        "-c:v", CODEC_H264,
-        "-preset", PRESET_ULTRAFAST,
-        "-tune", TUNE_STILLIMAGE,
-        "-pix_fmt", PIX_FMT_YUV420P,
-        "-c:a", CODEC_COPY,
-        "-movflags", MOVFLAGS_FASTSTART,
-        "-shortest",
-        "-y",
-        path(output),
-    ]
+    FfmpegArgs::new()
+        .loop_input(1)
+        .framerate(config.framerate)
+        .input(image)
+        .input(video)
+        .map("0:v")
+        .map("1:a")
+        .vf(&scale_filter)
+        .video_codec(CODEC_H264)
+        .preset(PRESET_ULTRAFAST)
+        .tune(TUNE_STILLIMAGE)
+        .pix_fmt(PIX_FMT_YUV420P)
+        .audio_codec(CODEC_COPY)
+        .movflags(MOVFLAGS_FASTSTART)
+        .shortest()
+        .overwrite()
+        .output(output)
+        .build()
 }
 
 /// Sets the output video width.
@@ -436,6 +414,278 @@ pub fn with_framerate(f: u8) -> VideoOption {
     Box::new(move |cfg| cfg.framerate = f)
 }
 
+/// A fluent builder for constructing FFmpeg CLI arguments.
+///
+/// This pattern is more idiomatic in Rust than macros, provides better
+/// type safety, and makes it easier to conditionally add arguments.
+#[derive(Default)]
+pub struct FfmpegArgs {
+    args: Vec<String>,
+}
+impl FfmpegArgs {
+    /// Creates a new, empty argument builder.
+    pub fn new() -> Self {
+        Self { args: Vec::new() }
+    }
+
+    // -------- Inputs / Outputs -------------------------------------------------
+
+    /// Add an input file (`-i`).
+    pub fn input(mut self, input_path: &Path) -> Self {
+        self.args.extend(args!["-i", path(input_path)]);
+        self
+    }
+
+    /// Add an input with a format specifier (`-f` + `-i`).
+    pub fn input_with_format(mut self, format: &str, input_path: &Path) -> Self {
+        self.args
+            .extend(args!["-f", format, "-i", path(input_path)]);
+        self
+    }
+
+    /// Add an input that is a filtergraph (just `-i` with a filter expression).
+    /// Use this for lavfi inputs like "color=c=black:s=1280x720:r=1".
+    pub fn input_with_filter(mut self, filtergraph: &str) -> Self {
+        self.args.extend(args!["-i", filtergraph]);
+        self
+    }
+
+    /// Add an output file (last argument).
+    pub fn output(mut self, input_path: &Path) -> Self {
+        self.args.push(path(input_path));
+        self
+    }
+
+    // -------- Codecs ----------------------------------------------------------
+
+    /// Set codec for all streams (`-c`).
+    pub fn codec(mut self, codec: &str) -> Self {
+        self.args.extend(args!["-c", codec]);
+        self
+    }
+
+    /// Set video codec (`-c:v`).
+    pub fn video_codec(mut self, codec: &str) -> Self {
+        self.args.extend(args!["-c:v", codec]);
+        self
+    }
+
+    /// Set audio codec (`-c:a`).
+    pub fn audio_codec(mut self, codec: &str) -> Self {
+        self.args.extend(args!["-c:a", codec]);
+        self
+    }
+
+    // -------- Filter graphs ---------------------------------------------------
+
+    /// Add a video filter (`-vf`).
+    pub fn vf(mut self, filter: &str) -> Self {
+        self.args.extend(args!["-vf", filter]);
+        self
+    }
+
+    /// Add an audio filter (`-af`).
+    pub fn af(mut self, filter: &str) -> Self {
+        self.args.extend(args!["-af", filter]);
+        self
+    }
+
+    // -------- Mapping ---------------------------------------------------------
+
+    /// Add a map option (`-map`).
+    pub fn map(mut self, spec: &str) -> Self {
+        self.args.extend(args!["-map", spec]);
+        self
+    }
+
+    // -------- Stream specifications -------------------------------------------
+
+    /// Add a stream disposition (`-disposition`).
+    pub fn disposition(mut self, stream_spec: &str, value: &str) -> Self {
+        self.args
+            .extend(args!["-disposition", format!("{}:{}", stream_spec, value)]);
+        self
+    }
+
+    // -------- Encoding parameters ---------------------------------------------
+
+    /// Set audio bitrate (`-b:a`), in kbps.
+    pub fn audio_bitrate(mut self, bitrate_k: u32) -> Self {
+        self.args.extend(args!["-b:a", format!("{}k", bitrate_k)]);
+        self
+    }
+
+    /// Set video bitrate (`-b:v`), in kbps.
+    pub fn video_bitrate(mut self, bitrate_k: u32) -> Self {
+        self.args.extend(args!["-b:v", format!("{}k", bitrate_k)]);
+        self
+    }
+
+    /// Set CRF value (`-crf`).
+    pub fn crf(mut self, value: u8) -> Self {
+        self.args.extend(args!["-crf", value.to_string()]);
+        self
+    }
+
+    /// Set preset (`-preset`).
+    pub fn preset(mut self, preset: &str) -> Self {
+        self.args.extend(args!["-preset", preset]);
+        self
+    }
+
+    /// Set tune (`-tune`).
+    pub fn tune(mut self, tune: &str) -> Self {
+        self.args.extend(args!["-tune", tune]);
+        self
+    }
+
+    /// Set pixel format (`-pix_fmt`).
+    pub fn pix_fmt(mut self, fmt: &str) -> Self {
+        self.args.extend(args!["-pix_fmt", fmt]);
+        self
+    }
+
+    // -------- Format / container options --------------------------------------
+
+    /// Set movflags (`-movflags`).
+    pub fn movflags(mut self, flags: &str) -> Self {
+        self.args.extend(args!["-movflags", flags]);
+        self
+    }
+
+    /// Set ID3v2 version (`-id3v2_version`).
+    pub fn id3v2_version(mut self, version: &str) -> Self {
+        self.args.extend(args!["-id3v2_version", version]);
+        self
+    }
+
+    /// Enable/disable writing ID3v1 tag (`-write_id3v1`).
+    pub fn write_id3v1(mut self, yes: bool) -> Self {
+        self.args
+            .extend(args!["-write_id3v1", if yes { "1" } else { "0" }]);
+        self
+    }
+
+    // -------- Duration / frame control ----------------------------------------
+
+    /// Set duration (`-t`).
+    pub fn duration(mut self, seconds: f64) -> Self {
+        self.args.extend(args!["-t", seconds.to_string()]);
+        self
+    }
+
+    /// Use `-shortest`.
+    pub fn shortest(mut self) -> Self {
+        self.args.push("-shortest".into());
+        self
+    }
+
+    /// Set number of frames for a stream spec (e.g., `-frames:v`).
+    pub fn frames(mut self, stream_spec: &str, count: u32) -> Self {
+        self.args
+            .extend(args![format!("-frames:{}", stream_spec), count.to_string()]);
+        self
+    }
+
+    /// Loop input (`-loop`). Usually used with image inputs.
+    pub fn loop_input(mut self, count: u32) -> Self {
+        self.args.extend(args!["-loop", count.to_string()]);
+        self
+    }
+
+    /// Set input framerate (`-framerate`).
+    pub fn framerate(mut self, fps: u8) -> Self {
+        self.args.extend(args!["-framerate", fps.to_string()]);
+        self
+    }
+
+    /// Seek to a timestamp (`-ss`).
+    pub fn seek(mut self, timestamp: &str) -> Self {
+        self.args.extend(args!["-ss", timestamp]);
+        self
+    }
+
+    // -------- Stream selection (disable) --------------------------------------
+
+    /// Disable audio (`-an`).
+    pub fn no_audio(mut self) -> Self {
+        self.args.push("-an".into());
+        self
+    }
+
+    /// Disable video (`-vn`).
+    pub fn no_video(mut self) -> Self {
+        self.args.push("-vn".into());
+        self
+    }
+
+    // -------- Overwrite / force ---------------------------------------------
+
+    /// Force overwrite (`-y`).
+    pub fn overwrite(mut self) -> Self {
+        self.args.push("-y".into());
+        self
+    }
+
+    /// Do not overwrite (`-n`).
+    pub fn no_overwrite(mut self) -> Self {
+        self.args.push("-n".into());
+        self
+    }
+
+    /// Set overwrite based on a bool.
+    pub fn overwrite_if(mut self, force: bool) -> Self {
+        if force {
+            self.args.push("-y".into());
+        } else {
+            self.args.push("-n".into());
+        }
+        self
+    }
+
+    // -------- Threads ---------------------------------------------------------
+
+    /// Set number of threads (`-threads`).
+    pub fn threads(mut self, n: &str) -> Self {
+        self.args.extend(args!["-threads", n]);
+        self
+    }
+
+    // -------- Generic raw argument --------------------------------------------
+
+    /// Add any raw argument (for options not yet covered).
+    pub fn arg<S: Into<String>>(mut self, arg: S) -> Self {
+        self.args.push(arg.into());
+        self
+    }
+
+    /// Add a key‑value option (e.g. `("-ss", "00:00:01")`).
+    pub fn option<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
+        self.args.extend([key.into(), value.into()]);
+        self
+    }
+
+    // -------- Special inputs ------------------------------------------------
+
+    /// Add a lavfi (libavfilter) input: `-f lavfi -i <filtergraph>`.
+    /// Use this for filtergraph inputs like "color=c=black:s=1280x720:r=1".
+    #[rustfmt::skip]
+    pub fn lavfi_input(mut self, filtergraph: &str) -> Self {
+        self.args.extend(args![
+            "-f", FORMAT_LAVFI,
+            "-i", filtergraph,
+        ]);
+        self
+    }
+
+    // -------- Build -----------------------------------------------------------
+
+    /// Consume the builder and return the final argument vector.
+    pub fn build(self) -> Vec<String> {
+        self.args
+    }
+}
+
 // -------------------------------------- Internal Helpers -------------------------------------- //
 
 /// Converts a path to a lossy string suitable for FFmpeg arguments.
@@ -444,6 +694,7 @@ fn path(path: &Path) -> String {
 }
 
 /// Returns `-y` or `-n` based on the `force` flag.
+#[deprecated(since = "0.1.6", note = "use FfmpegArgs::overwrite_if")]
 fn overwrite(force: bool) -> Vec<String> {
     args![if force { "-y" } else { "-n" }]
 }
@@ -468,8 +719,19 @@ mod tests {
             320,
             true,
         );
+        // check that -disposition v:0 attached_pic appears somewhere
         assert!(a
-            .windows(2)
-            .any(|x| x == ["-disposition:v:0", "attached_pic"]));
+            .windows(3)
+            .any(|x| x == ["-disposition", "v:0", "attached_pic"]));
+    }
+
+    #[test]
+    fn builder_works() {
+        let args = FfmpegArgs::new()
+            .input(Path::new("in.mp4"))
+            .codec("copy")
+            .output(Path::new("out.mp4"))
+            .build();
+        assert_eq!(args, vec!["-i", "in.mp4", "-c", "copy", "out.mp4"]);
     }
 }
