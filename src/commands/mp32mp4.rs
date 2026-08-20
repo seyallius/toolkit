@@ -106,10 +106,23 @@ impl BatchTask for Mp3ToMp4Task {
         ffmpeg: &Ffmpeg<R>,
     ) -> Result<FileOutcome> {
         let cover = files::temp_path(TEMP_COVER_PREFIX, TEMP_COVER_SUFFIX)?;
-        let has_cover = ffmpeg
-            .run(args::extract_embedded_cover(input, &cover))
-            .is_ok()
-            && cover.metadata().map(|m| m.len() > 0).unwrap_or(false);
+        let has_cover = match ffmpeg.run(args::extract_embedded_cover(input, &cover)) {
+            Ok(_) => {
+                // FFmpeg succeeded, check if the file has content
+                cover.metadata().map(|m| m.len() > 0).unwrap_or(false)
+            }
+            Err(e) => {
+                // FFmpeg failed - log it so the user knows why
+                eprintln!(
+                    "WARNING: Failed to extract cover art from {}: {}",
+                    input.display(),
+                    e
+                );
+                // Clean up any garbage file
+                let _ = fs::remove_file(&cover);
+                false
+            }
+        };
 
         if !has_cover && self.no_cover_fallback {
             let _ = fs::remove_file(&cover);
