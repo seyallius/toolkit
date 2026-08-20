@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-// --------------------------------- Macro --------------------------------- //
+// -------------------------------------------- Macro ------------------------------------------- //
 
 /// Create a Vec<String> from string literals and values that implement Display.
 ///
@@ -90,6 +90,8 @@ const HEIGHT: u16 = 1080;
 /// Default frames per second for the generated video.
 const FRAME_RATE: u8 = 30;
 
+// ------------------------------------------ Types & Impls ------------------------------------- //
+
 /// Configuration for video generation parameters.
 ///
 /// Contains the dimensions and framerate settings used when creating a static image video.
@@ -118,6 +120,278 @@ impl Default for VideoConfig {
 /// Used with the functional options pattern to apply one or more
 /// configuration overrides to the default video settings.
 pub type VideoOption = Box<dyn Fn(&mut VideoConfig)>;
+
+/// A fluent builder for constructing FFmpeg CLI arguments.
+///
+/// This pattern is more idiomatic in Rust than macros, provides better
+/// type safety, and makes it easier to conditionally add arguments.
+#[derive(Default)]
+pub struct FfmpegArgs {
+    args: Vec<String>,
+}
+impl FfmpegArgs {
+    /// Creates a new, empty argument builder.
+    pub fn new() -> Self {
+        Self { args: Vec::new() }
+    }
+
+    // -------- Inputs / Outputs -------------------------------------------------
+
+    /// Add an input file (`-i`).
+    pub fn input(mut self, input_path: &Path) -> Self {
+        self.args.extend(args!["-i", path(input_path)]);
+        self
+    }
+
+    /// Add an input with a format specifier (`-f` + `-i`).
+    pub fn input_with_format(mut self, format: &str, input_path: &Path) -> Self {
+        self.args
+            .extend(args!["-f", format, "-i", path(input_path)]);
+        self
+    }
+
+    /// Add an input that is a filtergraph (just `-i` with a filter expression).
+    /// Use this for lavfi inputs like "color=c=black:s=1280x720:r=1".
+    pub fn input_with_filter(mut self, filtergraph: &str) -> Self {
+        self.args.extend(args!["-i", filtergraph]);
+        self
+    }
+
+    /// Add an output file (last argument).
+    pub fn output(mut self, input_path: &Path) -> Self {
+        self.args.push(path(input_path));
+        self
+    }
+
+    // -------- Codecs ----------------------------------------------------------
+
+    /// Set codec for all streams (`-c`).
+    pub fn codec(mut self, codec: &str) -> Self {
+        self.args.extend(args!["-c", codec]);
+        self
+    }
+
+    /// Set video codec (`-c:v`).
+    pub fn video_codec(mut self, codec: &str) -> Self {
+        self.args.extend(args!["-c:v", codec]);
+        self
+    }
+
+    /// Set audio codec (`-c:a`).
+    pub fn audio_codec(mut self, codec: &str) -> Self {
+        self.args.extend(args!["-c:a", codec]);
+        self
+    }
+
+    // -------- Filter graphs ---------------------------------------------------
+
+    /// Add a video filter (`-vf`).
+    pub fn vf(mut self, filter: &str) -> Self {
+        self.args.extend(args!["-vf", filter]);
+        self
+    }
+
+    /// Add an audio filter (`-af`).
+    pub fn af(mut self, filter: &str) -> Self {
+        self.args.extend(args!["-af", filter]);
+        self
+    }
+
+    // -------- Mapping ---------------------------------------------------------
+
+    /// Add a map option (`-map`).
+    pub fn map(mut self, spec: &str) -> Self {
+        self.args.extend(args!["-map", spec]);
+        self
+    }
+
+    // -------- Stream specifications -------------------------------------------
+
+    /// Add a stream disposition (`-disposition`).
+    pub fn disposition(mut self, stream_spec: &str, value: &str) -> Self {
+        self.args
+            .extend(args!["-disposition", format!("{}:{}", stream_spec, value)]);
+        self
+    }
+
+    // -------- Encoding parameters ---------------------------------------------
+
+    /// Set audio bitrate (`-b:a`), in kbps.
+    pub fn audio_bitrate(mut self, bitrate_k: u32) -> Self {
+        self.args.extend(args!["-b:a", format!("{}k", bitrate_k)]);
+        self
+    }
+
+    /// Set video bitrate (`-b:v`), in kbps.
+    pub fn video_bitrate(mut self, bitrate_k: u32) -> Self {
+        self.args.extend(args!["-b:v", format!("{}k", bitrate_k)]);
+        self
+    }
+
+    /// Set CRF value (`-crf`).
+    pub fn crf(mut self, value: u8) -> Self {
+        self.args.extend(args!["-crf", value.to_string()]);
+        self
+    }
+
+    /// Set preset (`-preset`).
+    pub fn preset(mut self, preset: &str) -> Self {
+        self.args.extend(args!["-preset", preset]);
+        self
+    }
+
+    /// Set tune (`-tune`).
+    pub fn tune(mut self, tune: &str) -> Self {
+        self.args.extend(args!["-tune", tune]);
+        self
+    }
+
+    /// Set pixel format (`-pix_fmt`).
+    pub fn pix_fmt(mut self, fmt: &str) -> Self {
+        self.args.extend(args!["-pix_fmt", fmt]);
+        self
+    }
+
+    // -------- Format / container options --------------------------------------
+
+    /// Set movflags (`-movflags`).
+    pub fn movflags(mut self, flags: &str) -> Self {
+        self.args.extend(args!["-movflags", flags]);
+        self
+    }
+
+    /// Set ID3v2 version (`-id3v2_version`).
+    pub fn id3v2_version(mut self, version: &str) -> Self {
+        self.args.extend(args!["-id3v2_version", version]);
+        self
+    }
+
+    /// Enable/disable writing ID3v1 tag (`-write_id3v1`).
+    pub fn write_id3v1(mut self, yes: bool) -> Self {
+        self.args
+            .extend(args!["-write_id3v1", if yes { "1" } else { "0" }]);
+        self
+    }
+
+    // -------- Duration / frame control ----------------------------------------
+
+    /// Set duration (`-t`).
+    pub fn duration(mut self, seconds: f64) -> Self {
+        self.args.extend(args!["-t", seconds.to_string()]);
+        self
+    }
+
+    /// Use `-shortest`.
+    pub fn shortest(mut self) -> Self {
+        self.args.push("-shortest".into());
+        self
+    }
+
+    /// Set number of frames for a stream spec (e.g., `-frames:v`).
+    pub fn frames(mut self, stream_spec: &str, count: u32) -> Self {
+        self.args
+            .extend(args![format!("-frames:{}", stream_spec), count.to_string()]);
+        self
+    }
+
+    /// Loop input (`-loop`). Usually used with image inputs.
+    pub fn loop_input(mut self, count: u32) -> Self {
+        self.args.extend(args!["-loop", count.to_string()]);
+        self
+    }
+
+    /// Set input framerate (`-framerate`).
+    pub fn framerate(mut self, fps: u8) -> Self {
+        self.args.extend(args!["-framerate", fps.to_string()]);
+        self
+    }
+
+    /// Seek to a timestamp (`-ss`).
+    pub fn seek(mut self, timestamp: &str) -> Self {
+        self.args.extend(args!["-ss", timestamp]);
+        self
+    }
+
+    // -------- Stream selection (disable) --------------------------------------
+
+    /// Disable audio (`-an`).
+    pub fn no_audio(mut self) -> Self {
+        self.args.push("-an".into());
+        self
+    }
+
+    /// Disable video (`-vn`).
+    pub fn no_video(mut self) -> Self {
+        self.args.push("-vn".into());
+        self
+    }
+
+    // -------- Overwrite / force ---------------------------------------------
+
+    /// Force overwrite (`-y`).
+    pub fn overwrite(mut self) -> Self {
+        self.args.push("-y".into());
+        self
+    }
+
+    /// Do not overwrite (`-n`).
+    pub fn no_overwrite(mut self) -> Self {
+        self.args.push("-n".into());
+        self
+    }
+
+    /// Set overwrite based on a bool.
+    pub fn overwrite_if(mut self, force: bool) -> Self {
+        if force {
+            self.args.push("-y".into());
+        } else {
+            self.args.push("-n".into());
+        }
+        self
+    }
+
+    // -------- Threads ---------------------------------------------------------
+
+    /// Set number of threads (`-threads`).
+    pub fn threads(mut self, n: &str) -> Self {
+        self.args.extend(args!["-threads", n]);
+        self
+    }
+
+    // -------- Generic raw argument --------------------------------------------
+
+    /// Add any raw argument (for options not yet covered).
+    pub fn arg<S: Into<String>>(mut self, arg: S) -> Self {
+        self.args.push(arg.into());
+        self
+    }
+
+    /// Add a key‑value option (e.g. `("-ss", "00:00:01")`).
+    pub fn option<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
+        self.args.extend([key.into(), value.into()]);
+        self
+    }
+
+    // -------- Special inputs ------------------------------------------------
+
+    /// Add a lavfi (libavfilter) input: `-f lavfi -i <filtergraph>`.
+    /// Use this for filtergraph inputs like "color=c=black:s=1280x720:r=1".
+    #[rustfmt::skip]
+    pub fn lavfi_input(mut self, filtergraph: &str) -> Self {
+        self.args.extend(args![
+            "-f", FORMAT_LAVFI,
+            "-i", filtergraph,
+        ]);
+        self
+    }
+
+    // -------- Build -----------------------------------------------------------
+
+    /// Consume the builder and return the final argument vector.
+    pub fn build(self) -> Vec<String> {
+        self.args
+    }
+}
 
 // ----------------------------------------- Public API ----------------------------------------- //
 
@@ -412,278 +686,6 @@ pub fn with_height(h: u16) -> VideoOption {
 /// ```
 pub fn with_framerate(f: u8) -> VideoOption {
     Box::new(move |cfg| cfg.framerate = f)
-}
-
-/// A fluent builder for constructing FFmpeg CLI arguments.
-///
-/// This pattern is more idiomatic in Rust than macros, provides better
-/// type safety, and makes it easier to conditionally add arguments.
-#[derive(Default)]
-pub struct FfmpegArgs {
-    args: Vec<String>,
-}
-impl FfmpegArgs {
-    /// Creates a new, empty argument builder.
-    pub fn new() -> Self {
-        Self { args: Vec::new() }
-    }
-
-    // -------- Inputs / Outputs -------------------------------------------------
-
-    /// Add an input file (`-i`).
-    pub fn input(mut self, input_path: &Path) -> Self {
-        self.args.extend(args!["-i", path(input_path)]);
-        self
-    }
-
-    /// Add an input with a format specifier (`-f` + `-i`).
-    pub fn input_with_format(mut self, format: &str, input_path: &Path) -> Self {
-        self.args
-            .extend(args!["-f", format, "-i", path(input_path)]);
-        self
-    }
-
-    /// Add an input that is a filtergraph (just `-i` with a filter expression).
-    /// Use this for lavfi inputs like "color=c=black:s=1280x720:r=1".
-    pub fn input_with_filter(mut self, filtergraph: &str) -> Self {
-        self.args.extend(args!["-i", filtergraph]);
-        self
-    }
-
-    /// Add an output file (last argument).
-    pub fn output(mut self, input_path: &Path) -> Self {
-        self.args.push(path(input_path));
-        self
-    }
-
-    // -------- Codecs ----------------------------------------------------------
-
-    /// Set codec for all streams (`-c`).
-    pub fn codec(mut self, codec: &str) -> Self {
-        self.args.extend(args!["-c", codec]);
-        self
-    }
-
-    /// Set video codec (`-c:v`).
-    pub fn video_codec(mut self, codec: &str) -> Self {
-        self.args.extend(args!["-c:v", codec]);
-        self
-    }
-
-    /// Set audio codec (`-c:a`).
-    pub fn audio_codec(mut self, codec: &str) -> Self {
-        self.args.extend(args!["-c:a", codec]);
-        self
-    }
-
-    // -------- Filter graphs ---------------------------------------------------
-
-    /// Add a video filter (`-vf`).
-    pub fn vf(mut self, filter: &str) -> Self {
-        self.args.extend(args!["-vf", filter]);
-        self
-    }
-
-    /// Add an audio filter (`-af`).
-    pub fn af(mut self, filter: &str) -> Self {
-        self.args.extend(args!["-af", filter]);
-        self
-    }
-
-    // -------- Mapping ---------------------------------------------------------
-
-    /// Add a map option (`-map`).
-    pub fn map(mut self, spec: &str) -> Self {
-        self.args.extend(args!["-map", spec]);
-        self
-    }
-
-    // -------- Stream specifications -------------------------------------------
-
-    /// Add a stream disposition (`-disposition`).
-    pub fn disposition(mut self, stream_spec: &str, value: &str) -> Self {
-        self.args
-            .extend(args!["-disposition", format!("{}:{}", stream_spec, value)]);
-        self
-    }
-
-    // -------- Encoding parameters ---------------------------------------------
-
-    /// Set audio bitrate (`-b:a`), in kbps.
-    pub fn audio_bitrate(mut self, bitrate_k: u32) -> Self {
-        self.args.extend(args!["-b:a", format!("{}k", bitrate_k)]);
-        self
-    }
-
-    /// Set video bitrate (`-b:v`), in kbps.
-    pub fn video_bitrate(mut self, bitrate_k: u32) -> Self {
-        self.args.extend(args!["-b:v", format!("{}k", bitrate_k)]);
-        self
-    }
-
-    /// Set CRF value (`-crf`).
-    pub fn crf(mut self, value: u8) -> Self {
-        self.args.extend(args!["-crf", value.to_string()]);
-        self
-    }
-
-    /// Set preset (`-preset`).
-    pub fn preset(mut self, preset: &str) -> Self {
-        self.args.extend(args!["-preset", preset]);
-        self
-    }
-
-    /// Set tune (`-tune`).
-    pub fn tune(mut self, tune: &str) -> Self {
-        self.args.extend(args!["-tune", tune]);
-        self
-    }
-
-    /// Set pixel format (`-pix_fmt`).
-    pub fn pix_fmt(mut self, fmt: &str) -> Self {
-        self.args.extend(args!["-pix_fmt", fmt]);
-        self
-    }
-
-    // -------- Format / container options --------------------------------------
-
-    /// Set movflags (`-movflags`).
-    pub fn movflags(mut self, flags: &str) -> Self {
-        self.args.extend(args!["-movflags", flags]);
-        self
-    }
-
-    /// Set ID3v2 version (`-id3v2_version`).
-    pub fn id3v2_version(mut self, version: &str) -> Self {
-        self.args.extend(args!["-id3v2_version", version]);
-        self
-    }
-
-    /// Enable/disable writing ID3v1 tag (`-write_id3v1`).
-    pub fn write_id3v1(mut self, yes: bool) -> Self {
-        self.args
-            .extend(args!["-write_id3v1", if yes { "1" } else { "0" }]);
-        self
-    }
-
-    // -------- Duration / frame control ----------------------------------------
-
-    /// Set duration (`-t`).
-    pub fn duration(mut self, seconds: f64) -> Self {
-        self.args.extend(args!["-t", seconds.to_string()]);
-        self
-    }
-
-    /// Use `-shortest`.
-    pub fn shortest(mut self) -> Self {
-        self.args.push("-shortest".into());
-        self
-    }
-
-    /// Set number of frames for a stream spec (e.g., `-frames:v`).
-    pub fn frames(mut self, stream_spec: &str, count: u32) -> Self {
-        self.args
-            .extend(args![format!("-frames:{}", stream_spec), count.to_string()]);
-        self
-    }
-
-    /// Loop input (`-loop`). Usually used with image inputs.
-    pub fn loop_input(mut self, count: u32) -> Self {
-        self.args.extend(args!["-loop", count.to_string()]);
-        self
-    }
-
-    /// Set input framerate (`-framerate`).
-    pub fn framerate(mut self, fps: u8) -> Self {
-        self.args.extend(args!["-framerate", fps.to_string()]);
-        self
-    }
-
-    /// Seek to a timestamp (`-ss`).
-    pub fn seek(mut self, timestamp: &str) -> Self {
-        self.args.extend(args!["-ss", timestamp]);
-        self
-    }
-
-    // -------- Stream selection (disable) --------------------------------------
-
-    /// Disable audio (`-an`).
-    pub fn no_audio(mut self) -> Self {
-        self.args.push("-an".into());
-        self
-    }
-
-    /// Disable video (`-vn`).
-    pub fn no_video(mut self) -> Self {
-        self.args.push("-vn".into());
-        self
-    }
-
-    // -------- Overwrite / force ---------------------------------------------
-
-    /// Force overwrite (`-y`).
-    pub fn overwrite(mut self) -> Self {
-        self.args.push("-y".into());
-        self
-    }
-
-    /// Do not overwrite (`-n`).
-    pub fn no_overwrite(mut self) -> Self {
-        self.args.push("-n".into());
-        self
-    }
-
-    /// Set overwrite based on a bool.
-    pub fn overwrite_if(mut self, force: bool) -> Self {
-        if force {
-            self.args.push("-y".into());
-        } else {
-            self.args.push("-n".into());
-        }
-        self
-    }
-
-    // -------- Threads ---------------------------------------------------------
-
-    /// Set number of threads (`-threads`).
-    pub fn threads(mut self, n: &str) -> Self {
-        self.args.extend(args!["-threads", n]);
-        self
-    }
-
-    // -------- Generic raw argument --------------------------------------------
-
-    /// Add any raw argument (for options not yet covered).
-    pub fn arg<S: Into<String>>(mut self, arg: S) -> Self {
-        self.args.push(arg.into());
-        self
-    }
-
-    /// Add a key‑value option (e.g. `("-ss", "00:00:01")`).
-    pub fn option<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
-        self.args.extend([key.into(), value.into()]);
-        self
-    }
-
-    // -------- Special inputs ------------------------------------------------
-
-    /// Add a lavfi (libavfilter) input: `-f lavfi -i <filtergraph>`.
-    /// Use this for filtergraph inputs like "color=c=black:s=1280x720:r=1".
-    #[rustfmt::skip]
-    pub fn lavfi_input(mut self, filtergraph: &str) -> Self {
-        self.args.extend(args![
-            "-f", FORMAT_LAVFI,
-            "-i", filtergraph,
-        ]);
-        self
-    }
-
-    // -------- Build -----------------------------------------------------------
-
-    /// Consume the builder and return the final argument vector.
-    pub fn build(self) -> Vec<String> {
-        self.args
-    }
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //
