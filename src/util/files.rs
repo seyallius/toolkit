@@ -3,10 +3,11 @@
 
 use anyhow::{bail, Context, Result};
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
+    process,
+    time::SystemTime,
 };
-use tempfile::Builder;
 
 // --------------------------------- Types, Constants & Variables ------------------------------- //
 
@@ -88,13 +89,19 @@ pub fn has_extension(path: &Path, extension: &str) -> bool {
 }
 
 /// Creates a temporary file path with the given prefix and suffix.
+///
+/// Unlike `tempfile::Builder::keep()`, this does not create an empty file on disk,
+/// preventing orphaned 0-byte files if the process crashes before FFmpeg writes to it.
 pub fn temp_path(prefix: &str, suffix: &str) -> Result<PathBuf> {
-    let (_, path) = Builder::new()
-        .prefix(prefix)
-        .suffix(suffix)
-        .tempfile()?
-        .keep()?;
-    Ok(path)
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .context("system time before Unix epoch")?
+        .as_nanos();
+
+    let pid = process::id();
+    let filename = format!("{}{}_{}{}", prefix, pid, now, suffix);
+
+    Ok(env::temp_dir().join(filename))
 }
 
 #[cfg(test)]
