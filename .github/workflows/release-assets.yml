@@ -1,6 +1,7 @@
 # .github/workflows/release-assets.yml
 # Builds and uploads release binaries with standard Rust target triple naming.
 # This naming convention enables automatic discovery by cargo-binstall.
+
 name: Build & Release Binaries
 
 on:
@@ -10,6 +11,6 @@ on:
 
 jobs:
   build:
-    uses: seyallius/github-workflows/.github/workflows/build-binaries.yml@v1
+    uses: seyallius/github-workflows/.github/workflows/build-binaries.yml@v2
     with:
       binary_name: toolkitrs
