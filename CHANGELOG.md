@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7](https://github.com/seyallius/toolkit/compare/v0.1.6...v0.1.7) - 2026-08-21
+
+### Fixed
+
+- *(mp32mp4)* handle cover extraction failures with cleanup
+
+### Other
+
+- *(ffmpeg)* reorder FfmpegArgs builder above public API functions
+- *(ffmpeg)* replace macro with fluent builder
+- *(util)* generate tmpfile paths without empty files on disk
+
 ## [0.1.6](https://github.com/seyallius/toolkit/compare/v0.1.5...v0.1.6) - 2026-08-19
 
 ### Added
