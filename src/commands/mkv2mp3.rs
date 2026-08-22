@@ -45,8 +45,14 @@ const COVER_EXTRACTION_WARNING: &str = "cover extraction failed for {}; continui
 
 /// Arguments for the `mkv2mp3` subcommand.
 #[derive(Debug, Args)]
+#[command(after_help = "Examples:
+  toolkitrs mkv2mp3                              Scan and process all .mkv files in the current directory
+  toolkitrs mkv2mp3 movie.mkv                   Process one file; prompt if sibling .mkv files exist
+  toolkitrs mkv2mp3 --batch --input-dir /dir    Process all .mkv files in /dir
+  toolkitrs mkv2mp3 --batch --on-error skip     Continue past errors and report at the end
+  toolkitrs mkv2mp3 --cover-size 800            Extract larger cover art")]
 pub struct Mkv2mp3Args {
-    /// Common batch options like output directory and force overwrite.
+    /// Common batch options like output directory, force overwrite, and explicit batch scanning.
     #[command(flatten)]
     pub batch: BatchArgs,
 
@@ -58,7 +64,9 @@ pub struct Mkv2mp3Args {
     #[arg(long, default_value_t = DEFAULT_BITRATE)]
     pub bitrate: u32,
 
-    /// MKV files; scans the current directory when omitted.
+    /// MKV files to process.
+    ///
+    /// When omitted, the current directory is scanned for .mkv files.
     #[arg(value_name = "FILE")]
     pub files: Vec<PathBuf>,
 }
@@ -84,13 +92,7 @@ pub fn run<R: ProcessRunner>(args_cli: Mkv2mp3Args, ffmpeg: &Ffmpeg<R>) -> Resul
         bitrate: args_cli.bitrate,
         force: args_cli.batch.force,
     };
-    run_batch(
-        &task,
-        args_cli.files,
-        &args_cli.batch.output_dir,
-        args_cli.batch.force,
-        ffmpeg,
-    )
+    run_batch(&task, &args_cli.batch, args_cli.files, ffmpeg)
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //

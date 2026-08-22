@@ -1,4 +1,5 @@
-//! module util - Utility functions for file discovery and output handling.
+//! module util - Utility functions for file discovery, output handling, and batch flow.
 
+pub mod batch;
 pub mod files;
 pub mod output;
