@@ -81,6 +81,123 @@ pub fn companion_image(video: &Path) -> Result<PathBuf> {
     )
 }
 
+/// Returns true when the file stem ends with the given suffix.
+///
+/// This is useful for excluding generated outputs from batch discovery.
+/// For example, vidwrap creates `input_with_image.mp4`, and we usually do
+/// not want to re-wrap those generated files in a later batch scan.
+pub fn has_stem_suffix(path: &Path, suffix: &str) -> bool {
+    path.file_stem()
+        .is_some_and(|stem| stem.to_string_lossy().ends_with(suffix))
+}
+
+/// Finds regular files in a directory with a case-insensitive extension,
+/// canonicalizes them, and optionally excludes generated files by stem suffix.
+///
+/// # Arguments
+/// * `directory` - Directory to scan.
+/// * `extension` - File extension to match, without dot.
+/// * `exclude_stem_suffix` - Optional stem suffix to exclude.
+///
+/// # Returns
+/// A sorted vector of canonicalized matching file paths.
+pub fn canonical_discover(
+    directory: &Path,
+    extension: &str,
+    exclude_stem_suffix: Option<&str>,
+) -> Result<Vec<PathBuf>> {
+    let wanted = extension.trim_start_matches(EXTENSION_DISPLAY_PREFIX);
+    let mut paths = Vec::new();
+
+    for entry in
+        fs::read_dir(directory).with_context(|| format!("reading {}", directory.display()))?
+    {
+        let path = entry?.path();
+
+        if !path.is_file() {
+            continue;
+        }
+
+        if !path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case(wanted))
+        {
+            continue;
+        }
+
+        if let Some(suffix) = exclude_stem_suffix {
+            if has_stem_suffix(&path, suffix) {
+                continue;
+            }
+        }
+
+        // If a file cannot be canonicalized, skip it instead of failing the
+        // whole batch. This keeps discovery resilient to broken symlinks.
+        if let Ok(canonical) = path.canonicalize() {
+            paths.push(canonical);
+        }
+    }
+
+    paths.sort();
+    Ok(paths)
+}
+
+/// Builds a sorted queue for all matching files in a directory.
+///
+/// This is used for explicit batch mode:
+///
+/// ```bash
+/// toolkitrs vidwrap --batch
+/// toolkitrs vidwrap --input-dir /videos
+/// ```
+pub fn queue_from_directory(
+    directory: &Path,
+    extension: &str,
+    exclude_stem_suffix: Option<&str>,
+) -> Result<Vec<PathBuf>> {
+    canonical_discover(directory, extension, exclude_stem_suffix)
+}
+
+/// Builds a queue anchored by `entry`, with the anchor first and siblings after.
+///
+/// This is used when the user explicitly supplies one file, but we discover
+/// additional related files in the same directory and ask whether to expand
+/// the operation into a batch.
+///
+/// # Arguments
+/// * `entry` - The explicit input file.
+/// * `extension` - Extension to search for in the same directory.
+/// * `exclude_stem_suffix` - Optional generated-output suffix to exclude.
+///
+/// # Returns
+/// A vector with `entry` first, followed by sorted sibling files.
+pub fn queue_from_entry(
+    entry: &Path,
+    extension: &str,
+    exclude_stem_suffix: Option<&str>,
+) -> Result<Vec<PathBuf>> {
+    let parent = entry
+        .parent()
+        .with_context(|| format!("file has no parent: {}", entry.display()))?;
+
+    let canonical_entry = entry
+        .canonicalize()
+        .with_context(|| format!("file not found: {}", entry.display()))?;
+
+    let siblings = canonical_discover(parent, extension, exclude_stem_suffix)?;
+
+    let mut queue = Vec::with_capacity(siblings.len() + 1);
+    queue.push(canonical_entry.clone());
+
+    for path in siblings {
+        if path != canonical_entry {
+            queue.push(path);
+        }
+    }
+
+    Ok(queue)
+}
+
 /// Checks if a path has the given extension (case-insensitive).
 pub fn has_extension(path: &Path, extension: &str) -> bool {
     path.extension().is_some_and(|e| {
