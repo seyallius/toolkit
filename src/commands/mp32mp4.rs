@@ -36,8 +36,14 @@ const TEMP_COVER_SUFFIX: &str = ".jpg";
 
 /// Arguments for the `mp32mp4` subcommand.
 #[derive(Debug, Args)]
+#[command(after_help = "Examples:
+  toolkitrs mp32mp4                              Scan and process all .mp3 files in the current directory
+  toolkitrs mp32mp4 song.mp3                    Process one file; prompt if sibling .mp3 files exist
+  toolkitrs mp32mp4 --batch --input-dir /dir    Process all .mp3 files in /dir
+  toolkitrs mp32mp4 --batch --on-error skip     Continue past errors and report at the end
+  toolkitrs mp32mp4 --no-cover-fallback         Skip files without embedded cover art")]
 pub struct Mp32mp4Args {
-    /// Common batch options like output directory and force overwrite.
+    /// Common batch options like output directory, force overwrite, and explicit batch scanning.
     #[command(flatten)]
     pub batch: BatchArgs,
 
@@ -49,7 +55,9 @@ pub struct Mp32mp4Args {
     #[arg(long)]
     pub no_cover_fallback: bool,
 
-    /// MP3 files; scans the current directory when omitted.
+    /// MP3 files to process.
+    ///
+    /// When omitted, the current directory is scanned for .mp3 files.
     #[arg(value_name = "FILE")]
     pub files: Vec<PathBuf>,
 }

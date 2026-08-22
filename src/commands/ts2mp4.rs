@@ -23,12 +23,19 @@ const FILE_TYPE_NAME: &str = "TS";
 
 /// Arguments for the `ts2mp4` subcommand.
 #[derive(Debug, Args)]
+#[command(after_help = "Examples:
+  toolkitrs ts2mp4                              Scan and process all .ts files in the current directory
+  toolkitrs ts2mp4 video.ts                    Process one file; prompt if sibling .ts files exist
+  toolkitrs ts2mp4 --batch --input-dir /dir    Process all .ts files in /dir
+  toolkitrs ts2mp4 --batch --on-error skip     Continue past errors and report at the end")]
 pub struct Ts2mp4Args {
-    /// Common batch options like output directory and force overwrite.
+    /// Common batch options like output directory, force overwrite, and explicit batch scanning.
     #[command(flatten)]
     pub batch: BatchArgs,
 
-    /// TS files; scans the current directory when omitted.
+    /// TS files to process.
+    ///
+    /// When omitted, the current directory is scanned for .ts files.
     #[arg(value_name = "FILE")]
     pub files: Vec<PathBuf>,
 }

@@ -41,11 +41,22 @@ const MP4_EXT: &str = "mp4";
 const VIDWRAP_OUTPUT_STEM_SUFFIX: &str = "_with_image";
 
 /// Arguments for the `vidwrap` subcommand.
+///
+/// The doc comments on each field are rendered by clap in:
+///
+/// ```bash
+/// toolkitrs vidwrap --help
+/// ```
 #[derive(Debug, Args)]
+#[command(after_help = "Examples:
+  toolkitrs vidwrap input.mp4               Prompt when sibling MP4 files exist
+  toolkitrs vidwrap --batch                 Process all MP4 files in the current directory
+  toolkitrs vidwrap --input-dir /videos     Process all MP4 files in /videos
+  toolkitrs vidwrap --batch --on-error skip Continue past errors and report at the end")]
 pub struct VidwrapArgs {
     /// Video with a same-basename companion image.
     ///
-    /// Omit this when using `--batch` or `--input-dir`.
+    /// Omit this when using --batch or --input-dir.
     #[arg(value_name = "VIDEO")]
     pub video: Option<PathBuf>,
 
@@ -61,9 +72,9 @@ pub struct VidwrapArgs {
 
     /// Error policy for explicit batch mode.
     ///
-    /// If omitted, interactive terminals default to prompt-each, while
-    /// non-interactive terminals default to skip-on-error.
-    #[arg(long, value_enum)]
+    /// Requires --batch or --input-dir. If omitted, interactive terminals
+    /// prompt after each video, and non-interactive terminals skip errors.
+    #[arg(long, value_enum, value_name = "POLICY")]
     pub on_error: Option<cli::BatchOnError>,
 }
 
