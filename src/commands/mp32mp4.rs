@@ -75,13 +75,7 @@ pub fn run<R: ProcessRunner>(args_cli: Mp32mp4Args, ffmpeg: &Ffmpeg<R>) -> Resul
         force: args_cli.batch.force,
         no_cover_fallback: args_cli.no_cover_fallback,
     };
-    run_batch(
-        &task,
-        args_cli.files,
-        &args_cli.batch.output_dir,
-        args_cli.batch.force,
-        ffmpeg,
-    )
+    run_batch(&task, &args_cli.batch, args_cli.files, ffmpeg)
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //

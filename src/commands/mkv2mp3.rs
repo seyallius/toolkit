@@ -84,13 +84,7 @@ pub fn run<R: ProcessRunner>(args_cli: Mkv2mp3Args, ffmpeg: &Ffmpeg<R>) -> Resul
         bitrate: args_cli.bitrate,
         force: args_cli.batch.force,
     };
-    run_batch(
-        &task,
-        args_cli.files,
-        &args_cli.batch.output_dir,
-        args_cli.batch.force,
-        ffmpeg,
-    )
+    run_batch(&task, &args_cli.batch, args_cli.files, ffmpeg)
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //

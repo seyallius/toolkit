@@ -1,17 +1,21 @@
-//! module batch - Generic batch processing pipeline for media conversion commands.
+//! module batch - Generic interactive batch processing pipeline for media conversion commands.
 
 use crate::{
-    components::banner,
+    cli::{BatchArgs, BatchOnError},
+    components::{
+        banner,
+        prompt::{self, ContinueChoice, SiblingBatchChoice},
+    },
     ffmpeg::{Ffmpeg, ProcessRunner},
     util::{
+        batch::{BatchPolicy, BatchReport},
         files,
         output::{self, OutputDecision},
     },
 };
-use anyhow::{bail, Result};
-use console::Style;
+use anyhow::{bail, Context, Result};
 use std::{
-    io::{self, IsTerminal},
+    io::{self, BufReader, IsTerminal},
     path::{Path, PathBuf},
 };
 
@@ -20,10 +24,8 @@ use std::{
 /// Warning prefix printed for invalid inputs.
 const WARNING_PREFIX: &str = "WARNING";
 
-/// Summary label for the final tally line.
-const SUMMARY_LABEL: &str = "SUMMARY";
-
 /// Outcome of processing a single file in a batch.
+#[derive(Debug, Clone)]
 pub enum FileOutcome {
     /// The file was successfully processed.
     Success,
@@ -43,6 +45,11 @@ pub trait BatchTask {
     /// The human-readable name of the file type for log messages.
     fn file_type_name(&self) -> &str;
 
+    /// Optional stem suffix to exclude from batch discovery (e.g., "_with_image").
+    fn exclude_stem_suffix(&self) -> Option<&str> {
+        None
+    }
+
     /// Executes the conversion logic for a single file.
     fn process_file<R: ProcessRunner>(
         &self,
@@ -54,15 +61,16 @@ pub trait BatchTask {
 
 // ----------------------------------------- Public API ----------------------------------------- //
 
-/// Executes a batch process over a collection of files, handling discovery, skipping, and metrics.
+/// Executes an interactive batch process over a collection of files.
+///
+/// Handles queue resolution (including sibling discovery), error policies,
+/// continuation prompts, and final reporting.
 pub fn run_batch<R: ProcessRunner, T: BatchTask>(
     task: &T,
+    args: &BatchArgs,
     explicit_files: Vec<PathBuf>,
-    output_dir: &Path,
-    force: bool,
     ffmpeg: &Ffmpeg<R>,
 ) -> Result<()> {
-    // Print a beautiful TTY-aware banner at the start of the batch job
     println!(
         "{}",
         banner::render(
@@ -72,99 +80,238 @@ pub fn run_batch<R: ProcessRunner, T: BatchTask>(
         )
     );
 
-    output::ensure_directory(output_dir)?;
-    let inputs = collect_inputs(
-        explicit_files,
-        task.input_extension(),
-        task.file_type_name(),
-    )?;
+    let (queue, policy) = resolve_queue_and_policy(task, args, explicit_files)?;
 
-    let is_tty = io::stdout().is_terminal();
-
-    let (success_tag, skipped_tag, failed_tag) = if is_tty {
-        (
-            Style::new()
-                .green()
-                .bold()
-                .apply_to("✔ SUCCESS")
-                .to_string(),
-            Style::new()
-                .yellow()
-                .bold()
-                .apply_to("⏭ SKIPPED")
-                .to_string(),
-            Style::new().red().bold().apply_to("✖ FAILED").to_string(),
-        )
-    } else {
-        // Log-friendly format for CI/CD and file redirection
-        (
-            "[SUCCESS]".to_string(),
-            "[SKIPPED]".to_string(),
-            "[FAILED]".to_string(),
-        )
-    };
-
-    let mut succeeded = 0;
-    let mut skipped = 0;
-    let mut failed = 0;
-
-    for input in inputs {
-        let out = output::output_path(&input, output_dir, task.output_extension())?;
-
-        if output::decision(&out, force) == OutputDecision::SkipExisting {
-            println!("{skipped_tag}: {} already exists", out.display());
-            skipped += 1;
-            continue;
-        }
-
-        match task.process_file(&input, &out, ffmpeg) {
-            Ok(FileOutcome::Success) => {
-                println!("{success_tag}: {}", out.display());
-                succeeded += 1;
-            }
-            Ok(FileOutcome::Skipped(reason)) => {
-                println!("{skipped_tag}: {reason}");
-                skipped += 1;
-            }
-            Err(error) => {
-                eprintln!("{failed_tag}: {}: {error}", input.display());
-                failed += 1;
-            }
-        }
+    if queue.is_empty() {
+        println!("No {} files found to process.", task.file_type_name());
+        return Ok(());
     }
 
-    println!("{SUMMARY_LABEL}: {succeeded} succeeded, {skipped} skipped, {failed} failed");
-    if failed > 0 {
-        bail!("one or more conversions failed")
-    } else {
-        Ok(())
-    }
+    // Ensure output directory exists if we are going to process anything
+    output::ensure_directory(&args.output_dir)?;
+
+    execute_queue(task, args, &queue, policy, ffmpeg)
 }
 
 // -------------------------------------- Internal Helpers -------------------------------------- //
 
-/// Resolves input files either from explicit arguments or by scanning the current directory.
-fn collect_inputs(given: Vec<PathBuf>, extension: &str, type_name: &str) -> Result<Vec<PathBuf>> {
-    if given.is_empty() {
-        let found = files::discover(&std::env::current_dir()?, extension)?;
-        if found.is_empty() {
-            println!("No {type_name} files found to process.");
+/// Resolves the execution queue and batch policy from CLI arguments and interactive prompts.
+fn resolve_queue_and_policy<T: BatchTask>(
+    task: &T,
+    args: &BatchArgs,
+    explicit_files: Vec<PathBuf>,
+) -> Result<(Vec<PathBuf>, BatchPolicy)> {
+    let ext = task.input_extension();
+    let exclude = task.exclude_stem_suffix();
+
+    match (explicit_files.len(), &args.input_dir, args.batch) {
+        // Explicit directory scan
+        (0, Some(dir), _) | (_, Some(dir), _) => {
+            if !explicit_files.is_empty() {
+                bail!("Cannot combine explicit files with --input-dir");
+            }
+            let dir = dir
+                .canonicalize()
+                .with_context(|| format!("directory not found: {}", dir.display()))?;
+            let queue = files::queue_from_directory(&dir, ext, exclude)?;
+            let policy = resolve_explicit_policy(args.on_error);
+            Ok((queue, policy))
         }
-        Ok(found)
-    } else {
-        Ok(given
-            .into_iter()
-            .filter(|p| {
-                if !p.is_file() || !files::has_extension(p, extension) {
-                    eprintln!(
-                        "{WARNING_PREFIX}: skipping invalid {type_name} input: {}",
-                        p.display()
-                    );
-                    false
-                } else {
-                    true
+        // Explicit batch flag without files or input-dir -> scan CWD
+        (0, None, true) => {
+            let cwd = std::env::current_dir().context("reading current directory")?;
+            let queue = files::queue_from_directory(&cwd, ext, exclude)?;
+            let policy = resolve_explicit_policy(args.on_error);
+            Ok((queue, policy))
+        }
+        // Single file provided, no batch flags -> sibling discovery
+        (1, None, false) => {
+            if args.on_error.is_some() {
+                bail!("--on-error can only be used with --batch or --input-dir");
+            }
+            let file = explicit_files.into_iter().next().unwrap();
+            resolve_single_file_with_siblings(task, &file)
+        }
+        // Multiple files provided, no batch flags
+        (n, None, false) if n > 1 => {
+            if args.on_error.is_some() {
+                bail!("--on-error can only be used with --batch or --input-dir");
+            }
+            // Just use the provided files, default to skip on error for safety
+            let queue = filter_and_canonicalize(explicit_files, task.file_type_name());
+            Ok((queue, BatchPolicy::SkipOnError))
+        }
+        // No files, no flags -> Fallback: scan CWD
+        (0, None, false) => {
+            let cwd = std::env::current_dir().context("reading current directory")?;
+            let queue = files::queue_from_directory(&cwd, ext, exclude)?;
+            let policy = resolve_explicit_policy(args.on_error);
+            Ok((queue, policy))
+        }
+        _ => bail!("Invalid combination of batch arguments"),
+    }
+}
+
+/// Resolves policy for explicit batch runs (--batch or --input-dir).
+fn resolve_explicit_policy(on_error: Option<BatchOnError>) -> BatchPolicy {
+    match on_error {
+        Some(BatchOnError::Stop) => BatchPolicy::StopOnError,
+        Some(BatchOnError::Skip) => BatchPolicy::SkipOnError,
+        Some(BatchOnError::Prompt) => BatchPolicy::PromptEach,
+        None => {
+            if io::stdin().is_terminal() {
+                BatchPolicy::PromptEach
+            } else {
+                BatchPolicy::SkipOnError
+            }
+        }
+    }
+}
+
+/// Handles sibling discovery and prompting for a single explicit file.
+fn resolve_single_file_with_siblings<T: BatchTask>(
+    task: &T,
+    file: &Path,
+) -> Result<(Vec<PathBuf>, BatchPolicy)> {
+    let canonical = file
+        .canonicalize()
+        .with_context(|| format!("file not found: {}", file.display()))?;
+
+    let queue = files::queue_from_entry(
+        &canonical,
+        task.input_extension(),
+        task.exclude_stem_suffix(),
+    )?;
+
+    if queue.len() <= 1 {
+        return Ok((vec![canonical], BatchPolicy::Single));
+    }
+
+    let parent = canonical.parent().unwrap_or_else(|| Path::new("."));
+    let stdin = io::stdin();
+    let mut input = BufReader::new(stdin.lock());
+    let mut stdout = io::stdout();
+
+    let choice = prompt::sibling_batch_choice(&mut input, &mut stdout, parent, queue.len())?;
+
+    let (policy, final_queue) = match choice {
+        SiblingBatchChoice::ProcessInputOnly => (BatchPolicy::Single, vec![canonical]),
+        SiblingBatchChoice::ProcessAllStopOnError => (BatchPolicy::StopOnError, queue),
+        SiblingBatchChoice::ProcessAllSkipOnError => (BatchPolicy::SkipOnError, queue),
+        SiblingBatchChoice::ProcessAllPromptEach => (BatchPolicy::PromptEach, queue),
+    };
+
+    Ok((final_queue, policy))
+}
+
+/// Filters explicit files, warning on invalid ones, and canonicalizes them.
+fn filter_and_canonicalize(files: Vec<PathBuf>, type_name: &str) -> Vec<PathBuf> {
+    files
+        .into_iter()
+        .filter_map(|p| match p.canonicalize() {
+            Ok(c) => Some(c),
+            Err(_) => {
+                eprintln!(
+                    "{WARNING_PREFIX}: skipping invalid {type_name} input: {}",
+                    p.display()
+                );
+                None
+            }
+        })
+        .collect()
+}
+
+/// Executes the resolved queue with the given policy.
+fn execute_queue<R: ProcessRunner, T: BatchTask>(
+    task: &T,
+    args: &BatchArgs,
+    queue: &[PathBuf],
+    initial_policy: BatchPolicy,
+    ffmpeg: &Ffmpeg<R>,
+) -> Result<()> {
+    let total = queue.len();
+    let is_single = initial_policy == BatchPolicy::Single && total == 1;
+
+    let mut policy = initial_policy;
+    let mut report = BatchReport::new();
+
+    for (index, input) in queue.iter().enumerate() {
+        if total > 1 {
+            println!("File {}/{}: {}", index + 1, total, input.display());
+        }
+
+        let out = match output::output_path(input, &args.output_dir, task.output_extension()) {
+            Ok(p) => p,
+            Err(e) => {
+                report.record_failed(input.clone(), e.to_string());
+                if policy == BatchPolicy::StopOnError {
+                    report.print_summary();
+                    bail!("stopped on output path error: {e}");
                 }
-            })
-            .collect())
+                continue;
+            }
+        };
+
+        let mut processed = false;
+
+        if output::decision(&out, args.force) == OutputDecision::SkipExisting {
+            println!("⏭ SKIPPED: {} already exists", out.display());
+            report.record_skipped(input.clone(), "output exists");
+        } else {
+            processed = true;
+            match task.process_file(input, &out, ffmpeg) {
+                Ok(FileOutcome::Success) => {
+                    println!("✔ SUCCESS: {}", out.display());
+                    report.record_success(input.clone());
+                }
+                Ok(FileOutcome::Skipped(reason)) => {
+                    println!("⏭ SKIPPED: {reason}");
+                    report.record_skipped(input.clone(), reason);
+                    processed = false; // Task decided to skip, don't prompt
+                }
+                Err(error) => {
+                    eprintln!("✖ FAILED: {}: {error}", input.display());
+                    report.record_failed(input.clone(), error.to_string());
+
+                    match policy {
+                        BatchPolicy::Single | BatchPolicy::StopOnError => {
+                            report.print_summary();
+                            bail!("stopped after error on {}: {error}", input.display());
+                        }
+                        BatchPolicy::SkipOnError => {
+                            eprintln!("Continuing past error...");
+                        }
+                        BatchPolicy::PromptEach => {
+                            eprintln!("Error occurred.");
+                        }
+                    }
+                }
+            }
+        }
+
+        if processed && policy == BatchPolicy::PromptEach && index + 1 < total {
+            let next = &queue[index + 1];
+            let stdin = io::stdin();
+            let mut input_stream = BufReader::new(stdin.lock());
+            let mut stdout = io::stdout();
+
+            match prompt::continue_to_next(&mut input_stream, &mut stdout, next)? {
+                ContinueChoice::Yes => {}
+                ContinueChoice::YesToAll => {
+                    policy = BatchPolicy::SkipOnError;
+                }
+                ContinueChoice::No => break,
+            }
+        }
+    }
+
+    if !is_single {
+        report.print_summary();
+    }
+
+    if report.has_failures() {
+        bail!("one or more conversions failed")
+    } else {
+        Ok(())
     }
 }

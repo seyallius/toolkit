@@ -5,7 +5,7 @@
 use crate::commands::{
     mkv2mp3::Mkv2mp3Args, mp32mp4::Mp32mp4Args, ts2mp4::Ts2mp4Args, vidwrap::VidwrapArgs,
 };
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 // -------------------------------------------- Types ------------------------------------------- //
@@ -75,4 +75,32 @@ pub struct BatchArgs {
     /// By default, files with matching output paths are skipped to prevent accidental data loss.
     #[arg(long)]
     pub force: bool,
+
+    /// Process all matching files in the current directory (or --input-dir).
+    /// If omitted, but files are provided, sibling discovery may trigger.
+    #[arg(long)]
+    pub batch: bool,
+
+    /// Directory to scan for input files. Implies batch processing.
+    #[arg(long, value_name = "DIR")]
+    pub input_dir: Option<PathBuf>,
+
+    /// Error policy for explicit batch mode.
+    /// If omitted, interactive terminals default to prompt-each, while
+    /// non-interactive terminals default to skip-on-error.
+    #[arg(long, value_enum)]
+    pub on_error: Option<BatchOnError>,
+}
+
+/// Error policy for explicit directory batch processing.
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum BatchOnError {
+    /// Stop and report on first error.
+    Stop,
+
+    /// Skip errors and continue.
+    Skip,
+
+    /// Prompt after each file.
+    Prompt,
 }

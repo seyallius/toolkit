@@ -30,6 +30,7 @@ const FALLBACK_PARENT_DIR: &str = ".";
 ///
 /// # Returns
 /// A sorted vector of matching file paths.
+#[allow(dead_code)]
 pub fn discover(directory: &Path, extension: &str) -> Result<Vec<PathBuf>> {
     let wanted = extension.trim_start_matches(EXTENSION_DISPLAY_PREFIX);
     let mut paths = Vec::new();
@@ -199,6 +200,7 @@ pub fn queue_from_entry(
 }
 
 /// Checks if a path has the given extension (case-insensitive).
+#[allow(dead_code)]
 pub fn has_extension(path: &Path, extension: &str) -> bool {
     path.extension().is_some_and(|e| {
         e.eq_ignore_ascii_case(extension.trim_start_matches(EXTENSION_DISPLAY_PREFIX))

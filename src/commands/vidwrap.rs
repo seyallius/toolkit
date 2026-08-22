@@ -2,6 +2,7 @@
 //! images in single or batch mode.
 
 use crate::{
+    cli,
     components::{
         banner, progress,
         prompt::{self, ContinueChoice, SiblingBatchChoice},
@@ -14,7 +15,7 @@ use crate::{
     },
 };
 use anyhow::{bail, Context, Result};
-use clap::{Args, ValueEnum};
+use clap::Args;
 use console::Style;
 use std::{
     fs,
@@ -63,20 +64,7 @@ pub struct VidwrapArgs {
     /// If omitted, interactive terminals default to prompt-each, while
     /// non-interactive terminals default to skip-on-error.
     #[arg(long, value_enum)]
-    pub on_error: Option<OnError>,
-}
-
-/// CLI error policy for explicit batch scans.
-#[derive(Debug, Clone, Copy, ValueEnum)]
-pub enum OnError {
-    /// Stop and report on the first error.
-    Stop,
-
-    /// Skip failed files and continue.
-    Skip,
-
-    /// Prompt after each video.
-    Prompt,
+    pub on_error: Option<cli::BatchOnError>,
 }
 
 /// Resolved execution plan for vidwrap.
@@ -202,7 +190,7 @@ fn resolve_explicit_video(video: &Path) -> Result<VidwrapPlan> {
 }
 
 /// Resolves a plan for explicit directory batch mode.
-fn resolve_directory(dir: &Path, on_error: Option<OnError>) -> Result<VidwrapPlan> {
+fn resolve_directory(dir: &Path, on_error: Option<cli::BatchOnError>) -> Result<VidwrapPlan> {
     let dir = dir
         .canonicalize()
         .with_context(|| format!("directory not found: {}", dir.display()))?;
@@ -210,9 +198,9 @@ fn resolve_directory(dir: &Path, on_error: Option<OnError>) -> Result<VidwrapPla
     let queue = files::queue_from_directory(&dir, MP4_EXT, Some(VIDWRAP_OUTPUT_STEM_SUFFIX))?;
 
     let policy = match on_error {
-        Some(OnError::Stop) => BatchPolicy::StopOnError,
-        Some(OnError::Skip) => BatchPolicy::SkipOnError,
-        Some(OnError::Prompt) => BatchPolicy::PromptEach,
+        Some(cli::BatchOnError::Stop) => BatchPolicy::StopOnError,
+        Some(cli::BatchOnError::Skip) => BatchPolicy::SkipOnError,
+        Some(cli::BatchOnError::Prompt) => BatchPolicy::PromptEach,
         None => {
             if io::stdin().is_terminal() {
                 BatchPolicy::PromptEach
