@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8](https://github.com/seyallius/toolkit/compare/v0.1.7...v0.1.8) - 2026-08-22
+
+### Added
+
+- *(batch)* unify interactive discovery and error policies
+- *(vidwrap)* add interactive directory batch processing
+
+### Other
+
+- *(cli)* enhance help text and README with batch features
+
 ## [0.1.7](https://github.com/seyallius/toolkit/compare/v0.1.6...v0.1.7) - 2026-08-21
 
 ### Fixed
